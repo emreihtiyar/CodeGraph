@@ -1,6 +1,7 @@
 package me.emreihtiyar.codegraph.load;
 
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -102,6 +103,7 @@ public class GraphLoader {
             }
             linksToEndpoints();
             dependencies();
+            reachability();
             return new Result(new GraphBatch(new ArrayList<>(nodes.values()), rels), warnings);
         }
 
@@ -480,6 +482,49 @@ public class GraphLoader {
                 String to = nodes.containsKey(serviceId(parts[1])) ? serviceId(parts[1]) : externalService(parts[1]);
                 rel(RelType.DEPENDS_ON, serviceId(parts[0]), to, props("callCount", count));
             });
+        }
+
+        /**
+         * Metotlara {@code reachesExternal} (doğrudan ya da dolaylı Feign çağrısı) ve {@code reachesDb} (doğrudan ya da
+         * dolaylı repository çağrısı) özelliklerini ekler; çağrı ağacındaki "yalnızca dış çağrıya / DB'ye giden dallar"
+         * filtresi (FR-23) bunları kullanır. Servis sınırında durur.
+         */
+        private void reachability() {
+            Map<String, List<String>> callers = new HashMap<>();
+            Set<String> external = new HashSet<>();
+            Set<String> db = new HashSet<>();
+            for (RelRecord r : rels) {
+                switch (r.type()) {
+                    case CALLS -> callers.computeIfAbsent(r.toId(), k -> new ArrayList<>()).add(r.fromId());
+                    case INVOKES -> external.add(r.fromId());
+                    case USES_REPOSITORY -> db.add(r.fromId());
+                    default -> { }
+                }
+            }
+            Set<String> reachesExternal = closure(external, callers);
+            Set<String> reachesDb = closure(db, callers);
+            nodes.replaceAll((id, n) -> {
+                if (n.label() != NodeLabel.METHOD) {
+                    return n;
+                }
+                Map<String, Object> p = new LinkedHashMap<>(n.properties());
+                p.put("reachesExternal", reachesExternal.contains(id));
+                p.put("reachesDb", reachesDb.contains(id));
+                return new NodeRecord(n.label(), n.id(), n.key(), p);
+            });
+        }
+
+        private static Set<String> closure(Set<String> seeds, Map<String, List<String>> callers) {
+            Set<String> seen = new HashSet<>(seeds);
+            ArrayDeque<String> queue = new ArrayDeque<>(seeds);
+            while (!queue.isEmpty()) {
+                for (String caller : callers.getOrDefault(queue.poll(), List.of())) {
+                    if (seen.add(caller)) {
+                        queue.add(caller);
+                    }
+                }
+            }
+            return seen;
         }
 
         // ---- yardımcılar ----

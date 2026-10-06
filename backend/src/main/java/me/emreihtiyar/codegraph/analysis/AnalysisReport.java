@@ -3,6 +3,7 @@ package me.emreihtiyar.codegraph.analysis;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Analiz raporu (PRD FR-12): istatistikler, çözümlenemeyen ve belirsiz bağlar, parse hatası alan dosyalar.
@@ -54,6 +55,21 @@ public record AnalysisReport(
     public record CallIssue(String repo, String caller, String expression, int line, List<String> candidates) {}
 
     public record FileIssue(String repo, String file, int line, String message) {}
+
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
+    /** {@code AnalysisRun.report} özelliğindeki JSON'dan okur. */
+    public static AnalysisReport fromJson(String json) {
+        return JSON.readValue(json, AnalysisReport.class);
+    }
+
+    public String toJson() {
+        return JSON.writeValueAsString(this);
+    }
+
+    static String toJson(Object value) {
+        return JSON.writeValueAsString(value);
+    }
 
     public int issueCount() {
         return unresolvedLinks.size() + ambiguousLinks.size() + parseIssues.size();

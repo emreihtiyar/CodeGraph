@@ -45,7 +45,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Analiz boru hattı (PRD §8.1): Scan → Parse/Extract → Link → Load → Report.
@@ -60,7 +59,6 @@ import tools.jackson.databind.json.JsonMapper;
 public class AnalysisService implements DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(AnalysisService.class);
-    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final ReposConfigProvider configProvider;
     private final RepoScanner scanner;
@@ -155,7 +153,7 @@ public class AnalysisService implements DisposableBean {
                 .findFirst()
                 .map(row -> (GraphNode) row.get("r"))
                 .map(n -> (String) n.properties().get("report"))
-                .map(json -> JSON.readValue(json, AnalysisReport.class));
+                .map(AnalysisReport::fromJson);
     }
 
     @Override
@@ -351,9 +349,9 @@ public class AnalysisService implements DisposableBean {
         props.put("status", state);
         props.put("error", error);
         if (report != null) {
-            props.put("stats", JSON.writeValueAsString(report.nodeCounts()));
+            props.put("stats", AnalysisReport.toJson(report.nodeCounts()));
             props.put("issueCount", report.issueCount());
-            props.put("report", JSON.writeValueAsString(report));
+            props.put("report", report.toJson());
         }
         store.write(new GraphBatch(List.of(NodeRecord.of(NodeLabel.ANALYSIS_RUN, runId, props)), List.of()));
     }
