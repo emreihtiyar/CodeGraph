@@ -64,6 +64,38 @@ public class ReposConfigLoader {
         return new ReposConfig(source, repos, placeholders);
     }
 
+    /**
+     * {@code application.yml} içindeki {@code codegraph.repos} tanımları; doğrulama kuralları dosyadakiyle aynıdır.
+     *
+     * @param baseDir göreli yolların çözüleceği dizin (çalışma dizini)
+     */
+    public ReposConfig fromInline(List<CodeGraphProperties.Repo> inline, Map<String, String> placeholders, Path baseDir) {
+        Path source = Path.of("application.yml#codegraph.repos");
+        List<String> errors = new ArrayList<>();
+        List<Map<String, Object>> maps = new ArrayList<>();
+        for (CodeGraphProperties.Repo repo : inline) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            putIfNotNull(map, "name", repo.name());
+            putIfNotNull(map, "path", repo.path());
+            putIfNotNull(map, "layer", repo.layer());
+            putIfNotNull(map, "serviceName", repo.serviceName());
+            putIfNotNull(map, "gatewayPrefix", repo.gatewayPrefix());
+            putIfNotNull(map, "aliases", repo.aliases());
+            maps.add(map);
+        }
+        List<RepoDefinition> repos = readRepos(maps, baseDir.toAbsolutePath().normalize(), errors);
+        if (!errors.isEmpty()) {
+            throw new ReposConfigException(source, errors);
+        }
+        return new ReposConfig(source, repos, placeholders);
+    }
+
+    private static void putIfNotNull(Map<String, Object> map, String key, Object value) {
+        if (value != null) {
+            map.put(key, value);
+        }
+    }
+
     private static Object readYaml(Path source, List<String> errors) {
         if (!Files.isRegularFile(source)) {
             errors.add("Dosya bulunamadı");

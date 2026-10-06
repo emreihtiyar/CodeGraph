@@ -69,6 +69,17 @@ tsconfig'te tanım yoksa `@/…` ve `~/…`, `src/…` kabul ediliyor.
 - **Varsayım:** Bu yeterli. Gerçek projede farklı bir alias varsa repo yapılandırmasına `aliases` haritası eklerim.
 - Cevap:
 
+## Bağlama ve yükleme (M5)
+
+### Q9. Analiz sırasında sorgular
+Her analiz grafı sıfırdan üretiyor (FR-10): önce `AnalysisRun` dışındaki her şey siliniyor, sonra yeni graf yazılıyor.
+Bu arada gelen REST/MCP sorguları boş ya da yarım graf görebilir. Mini sistemde bu süre bir saniyenin altında; büyük
+repolarda yazma birkaç saniye sürebilir. Analiz aşamaları (parse vb.) graf silinmeden önce bittiği için bu pencere
+yalnızca Load aşaması kadar.
+- **Varsayım:** MVP'de bu kabul edilebilir. Analiz durumu (`RUNNING`, aşama `LOAD`) API'den görülebiliyor ve UI bu sırada
+  uyarı gösterecek. Kesintisiz olması gerekirse ikinci bir veritabanına yazıp yer değiştirme (blue/green) eklenebilir.
+- Cevap:
+
 ## Tasarım kararları (bilgi amaçlı)
 
 - **D1. Java düğümlerinin anahtarı `repo + fqn`:** PRD §8.6 `Method.fqn` ve `Class.fqn` için global benzersizlik istiyordu.
@@ -115,3 +126,31 @@ tsconfig'te tanım yoksa `@/…` ve `~/…`, `src/…` kabul ediliyor.
   - Aynı ApiCall aynı yolla (via/hook) birden çok kez kullanılırsa tek kullanım sayılıyor.
   - Route `element`'i sarmalayıcı içeriyorsa (`<Suspense>`, `<RequireAuth>`) en içteki proje component'i ekran oluyor.
   - Path'siz layout route'ları ekran sayılmıyor.
+- **D14. Linker eşleştirme kuralları:**
+  - **ApiCall → BFF:** `targetPrefix`, BFF'in gateway prefix'iyle eşleşir (büyük-küçük harf duyarsız; prefix
+    verilmezse servis adı). Kalan path eşleşmezse prefix'li hali de deneniyor (gateway prefix'i kesmiyorsa diye).
+  - **Feign → servis:** sırasıyla servis adı (`spring.application.name`), repo adı ve `aliases` ile eşleşiyor.
+    Path eşleşmezse hedefin context-path'i eklenerek tekrar deneniyor.
+  - **HTTP metodu:** aynı olmalı; `ANY` her metotla eşleşiyor.
+  - **Birden çok aday:** Spring'e benzer şekilde segmentleri birebir tutan (`/a/me` ↔ `/a/me`, `/a/{*}` ↔ `/a/{*}`)
+    ve metodu açıkça aynı olan endpoint tercih ediliyor. Yine birden fazla kalırsa `AMBIGUOUS` ve her adaya kenar.
+  - **Çözümlenemeyen bağ:** kaynak düğümde `resolution=UNRESOLVED` ve `unresolvedReason` olarak duruyor, kenar yok.
+    Endpoint bulunamasa da hedef servis biliniyorsa (`targetService`) `DEPENDS_ON` yine çıkıyor.
+- **D15. Düğüm anahtarları:**
+  - **Repoya ait düğümler:** `repo|fqn` (frontend'de `repo|dosya#ad`). Aynı FQN farklı repolarda çakışmıyor.
+  - **Diğerleri:** Service adıyla, Endpoint `servis|METOT|normalizePath` ile, Table `şema|ad` (küçük harf) ile.
+    Aynı tabloyu kullanan servisler tek Table düğümünde buluşuyor.
+  - **Repolar arası hedefler** (çağrı, override, entity): önce aynı repoda, sonra LIBRARY repolarında aranıyor.
+  - **Hedefi çözülemeyen çağrılar** kenar olmuyor: ifadeleri çağıran metodun `unresolvedCalls` listesinde ve raporda.
+  - **Ek özellik:** tüm repo düğümlerinde `repo` ve `service` var.
+- **D16. `DEPENDS_ON` ve dış servisler:**
+  - **`callCount`:** frontend için hedef BFF'e giden ApiCall sayısı, Java servisleri için Feign çağrı noktası sayısı.
+    Tanımlı ama hiç çağrılmayan Feign istemcisi `callCount=0` ile görünüyor.
+  - **Analizde olmayan Feign hedefleri** (ör. `legacy-score-service`): `analyzed=false` bir Service düğümü
+    oluşturuluyor, sistem görünümünde gösteriliyor.
+- **D17. Analiz çalıştırma:**
+  - **Sıra:** LIBRARY repoları önce analiz ediliyor; kaynak kökleri ve tip modelleri sonraki repolara veriliyor.
+  - **Hata dayanıklılığı:** bir repo hata verirse analiz durmuyor, hata rapora yazılıyor.
+  - **Rapor (FR-12):** `AnalysisRun` düğümünde JSON olarak saklanıyor (`report`, `stats`), başarısız analizler de
+    kaydediliyor. Analizler arası geçmiş korunuyor, aynı anda tek analiz çalışıyor.
+  - **`commitHash`:** `.git` dizininden git çalıştırılmadan okunuyor.

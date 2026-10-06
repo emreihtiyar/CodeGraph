@@ -3,7 +3,27 @@ spring:
     name: CodeGraph
 
 codegraph:
-  # Analiz edilecek repoları tanımlayan YAML (PRD FR-01). Göreli yollar çalışma dizinine göredir.
+  # Analiz edilecek repolar (PRD FR-01). İki seçenek:
+  #  1) Ayrı YAML dosyası (içindeki göreli yollar dosyanın dizinine göredir):
   repos-file: ./codegraph-repos.yml
+  #  2) Doğrudan burada; doluysa repos-file okunmaz. Göreli yollar çalışma dizinine göredir.
+  #     Değerler ortam değişkeniyle ezilebilir, ör. CODEGRAPH_REPOS_0_PATH=/repos/leasing-web
+  # repos:
+  #   - name: leasing-web
+  #     path: ../repos/leasing-web
+  #     layer: FRONTEND                    # FRONTEND | BFF | API | ADAPTER | LIBRARY
+  #   - name: leasing-credit-bff
+  #     path: ../repos/leasing-credit-bff
+  #     layer: BFF
+  #     gateway-prefix: leasing-credit-bff # opsiyonel; varsayılan servis adı
+  #   - name: credit-api
+  #     path: ../repos/credit-api
+  #     layer: API
+  #     service-name: credit-api           # opsiyonel; varsayılan spring.application.name
+  #     aliases: [credit]                  # opsiyonel; Feign adı eşlemeleri
+  # Çözülemeyen ${...} değerleri (ör. config server'dan gelen Feign adları); noktalı anahtarlar [ ] içinde.
+  # Dosyadaki placeholders ile birleşir, çakışmada buradaki geçerlidir.
+  # placeholders:
+  #   "[clients.credit.name]": credit-api
   neo4j:
     data-dir: ./.codegraph/neo4j
