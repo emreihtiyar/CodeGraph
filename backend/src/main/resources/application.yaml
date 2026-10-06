@@ -27,3 +27,9 @@ codegraph:
   #   "[clients.credit.name]": credit-api
   neo4j:
     data-dir: ./.codegraph/neo4j
+  # MCP sunucusu (PRD §8.8), Streamable HTTP. stdio istemcileri için: java -jar … --mcp-stdio-bridge (docs/mcp.md)
+  mcp:
+    enabled: true
+    endpoint: /mcp
+    # Tarayıcıdan gelen isteklerde kabul edilen Origin'ler (DNS rebinding koruması); Origin'siz istemciler serbest.
+    allowed-origins: ["http://localhost:*", "http://127.0.0.1:*"]

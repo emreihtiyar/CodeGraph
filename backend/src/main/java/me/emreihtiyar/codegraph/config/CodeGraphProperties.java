@@ -19,13 +19,15 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param placeholders application dosyalarında çözülemeyen {@code ${...}} değerleri; dosyadakileri ezer.
  *                     Noktalı anahtarlar köşeli parantezle yazılır: {@code "[clients.credit.name]": credit-api}
  * @param neo4j        Embedded Neo4j ayarları
+ * @param mcp          MCP sunucusu ayarları
  */
 @ConfigurationProperties("codegraph")
 public record CodeGraphProperties(
         @DefaultValue("./codegraph-repos.yml") Path reposFile,
         List<Repo> repos,
         Map<String, String> placeholders,
-        @DefaultValue Neo4j neo4j) {
+        @DefaultValue Neo4j neo4j,
+        @DefaultValue Mcp mcp) {
 
     public CodeGraphProperties {
         repos = repos == null ? List.of() : List.copyOf(repos);
@@ -38,4 +40,16 @@ public record CodeGraphProperties(
 
     /** @param dataDir Embedded Neo4j'nin ana dizini (veri, log, transaction log) */
     public record Neo4j(@DefaultValue("./.codegraph/neo4j") Path dataDir) {}
+
+    /**
+     * @param enabled        Streamable HTTP MCP uç noktası açılsın mı
+     * @param endpoint       MCP uç noktasının yolu
+     * @param allowedOrigins tarayıcı kaynaklı isteklerde kabul edilen {@code Origin} değerleri (DNS rebinding
+     *                       koruması); {@code http://localhost:*} biçiminde port joker karakteri desteklenir.
+     *                       {@code Origin} başlığı olmayan istekler (MCP istemcileri) her zaman kabul edilir
+     */
+    public record Mcp(
+            @DefaultValue("true") boolean enabled,
+            @DefaultValue("/mcp") String endpoint,
+            @DefaultValue({"http://localhost:*", "http://127.0.0.1:*"}) List<String> allowedOrigins) {}
 }

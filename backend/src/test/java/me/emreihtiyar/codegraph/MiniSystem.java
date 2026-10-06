@@ -38,7 +38,7 @@ public final class MiniSystem {
 
     public static ReposConfigProvider configProvider() {
         return new ReposConfigProvider(
-                new CodeGraphProperties(Fixtures.miniSystemConfig(), null, null, null), new ReposConfigLoader());
+                new CodeGraphProperties(Fixtures.miniSystemConfig(), null, null, null, null), new ReposConfigLoader());
     }
 
     private static RepoFacts analyze(RepoDefinition repo) {

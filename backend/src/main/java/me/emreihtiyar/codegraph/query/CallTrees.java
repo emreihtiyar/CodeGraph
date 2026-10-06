@@ -216,7 +216,7 @@ final class CallTrees {
             }
         }
         List<Orchestration.Step> steps = new ArrayList<>();
-        walk(handler, "", new ArrayList<>(), new ArrayList<>(List.of(handler.id())), false, false, false, children,
+        walk(handler, new ArrayList<>(), new ArrayList<>(List.of(handler.id())), false, false, false, children,
                 tables, endpoints, steps);
         if (steps.size() > MAX_STEPS) {
             return new Orchestration(NodeSummary.of(endpoint), NodeSummary.of(handler), steps.subList(0, MAX_STEPS),
@@ -225,14 +225,13 @@ final class CallTrees {
         return new Orchestration(NodeSummary.of(endpoint), NodeSummary.of(handler), steps, truncated);
     }
 
-    private void walk(GraphNode method, String path, List<String> via, List<String> stack, boolean conditional,
+    private void walk(GraphNode method, List<String> via, List<String> stack, boolean conditional,
             boolean inLoop, boolean async, Map<String, List<Child>> children, Map<String, List<String>> tables,
             Map<String, List<String>> endpoints, List<Orchestration.Step> steps) {
         List<Child> kids = children.getOrDefault(method.id(), List.of());
         for (int i = 0; i < kids.size() && steps.size() <= MAX_STEPS; i++) {
             Child c = kids.get(i);
             Map<String, Object> r = c.rel().properties();
-            String stepPath = path.isEmpty() ? String.valueOf(i + 1) : path + "." + (i + 1);
             boolean cond = conditional || Boolean.TRUE.equals(r.get("conditional"));
             boolean loop = inLoop || Boolean.TRUE.equals(r.get("inLoop"));
             boolean asy = async || Boolean.TRUE.equals(r.get("async"));
@@ -241,17 +240,17 @@ final class CallTrees {
             String name = NodeSummary.displayName(NodeSummary.label(n), p);
             int line = (int) longOr(r.get("line"), 0);
             if (n.labels().contains("FeignMethod")) {
-                steps.add(new Orchestration.Step(stepPath, "FEIGN", n.id(), name, method.id(), line, List.copyOf(via),
+                steps.add(new Orchestration.Step(steps.size() + 1, "FEIGN", n.id(), name, method.id(), line, List.copyOf(via),
                         cond, loop, asy, (String) p.get("resolution"), (String) p.get("targetService"),
                         endpoints.getOrDefault(n.id(), List.of()), null));
             } else if (n.labels().contains("RepositoryMethod")) {
-                steps.add(new Orchestration.Step(stepPath, "REPOSITORY", n.id(), name, method.id(), line,
+                steps.add(new Orchestration.Step(steps.size() + 1, "REPOSITORY", n.id(), name, method.id(), line,
                         List.copyOf(via), cond, loop, asy, null, (String) p.get("service"),
                         tables.getOrDefault(n.id(), List.of()), (String) p.get("accessType")));
             } else if (n.labels().contains("Method") && !stack.contains(n.id())) {
                 via.add(name);
                 stack.add(n.id());
-                walk(n, stepPath, via, stack, cond, loop, asy, children, tables, endpoints, steps);
+                walk(n, via, stack, cond, loop, asy, children, tables, endpoints, steps);
                 stack.remove(stack.size() - 1);
                 via.remove(via.size() - 1);
             }

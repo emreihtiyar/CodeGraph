@@ -80,6 +80,22 @@ yalnızca Load aşaması kadar.
   uyarı gösterecek. Kesintisiz olması gerekirse ikinci bir veritabanına yazıp yer değiştirme (blue/green) eklenebilir.
 - Cevap:
 
+## Sorgu API'si ve MCP (M6)
+
+### Q10. MCP araç açıklamalarının dili
+Araç açıklamaları, sunucu talimatları ve sonuçlardaki özet metinler Türkçe (hata mesajları ve kodun geri kalanıyla
+aynı). AI istemcileri Türkçeyi sorunsuz anlıyor, ancak MCP ekosisteminde açıklamalar genelde İngilizce.
+- **Varsayım:** Türkçe kalsın. İngilizce istenirse metinler tek sınıfta (`CodeGraphTools`, `TextSummaries`).
+- Cevap:
+
+### Q11. Sunucunun ağa açılması ve kimlik doğrulama
+Uygulama varsayılan olarak tüm ağ arayüzlerinde dinliyor; REST ve `/mcp` kimlik doğrulamasız. MCP için tarayıcıdan
+gelen yabancı `Origin`'ler reddediliyor (DNS rebinding koruması, `codegraph.mcp.allowed-origins`), ama aynı ağdaki
+herkes API'yi çağırabilir. Kaynak kodu (`get_code`) da bu yolla okunabiliyor.
+- **Varsayım:** MVP her geliştiricinin kendi makinesinde ya da güvenilir iç ağda çalışıyor. Yalnızca yerel kullanım
+  için `server.address=127.0.0.1` önerilir. Ortak sunucuya kurulacaksa token/SSO eklenmeli.
+- Cevap:
+
 ## Tasarım kararları (bilgi amaçlı)
 
 - **D1. Java düğümlerinin anahtarı `repo + fqn`:** PRD §8.6 `Method.fqn` ve `Class.fqn` için global benzersizlik istiyordu.
@@ -154,3 +170,30 @@ yalnızca Load aşaması kadar.
   - **Rapor (FR-12):** `AnalysisRun` düğümünde JSON olarak saklanıyor (`report`, `stats`), başarısız analizler de
     kaydediliyor. Analizler arası geçmiş korunuyor, aynı anda tek analiz çalışıyor.
   - **`commitHash`:** `.git` dizininden git çalıştırılmadan okunuyor.
+- **D18. Düğüm referansları:** REST'teki `{id}` ve MCP'deki `ref` parametreleri düğüm id'si ya da doğal ad kabul
+  ediyor: route (`/credit-application`), tablo (`offers`, `LEASING.CREDIT`), endpoint (`GET /applications/{x}`, başında
+  servis adıyla da; parametre adı fark etmez), servis, component/sınıf adı, `Sinif.metot`.
+  - **Birden çok eşleşme:** Ad birden çok düğüme uyarsa adaylar id'leriyle birlikte hata olarak dönüyor (400 /
+    `isError`). İstisna: tek bir ekran, servis ya da tablo varsa o tercih ediliyor.
+  - **İçinde `/` olan referanslar:** URL path'inde kullanılamadığı için REST'te id ya da sorgu parametresi (`from`, `q`)
+    kullanılıyor.
+- **D19. İz anlamı:**
+  - **İleri iz:** yalnızca tabloya, entity'ye, endpoint'e, ApiCall'a ya da Feign/repository metoduna giden dallar
+    tutuluyor (`prune=false` ile tamamı).
+  - **Geri iz:** budanmıyor, çünkü zamanlanmış işler gibi ekrana bağlı olmayan çağıranlar da önemli.
+  - **Erişimciler:** getter/setter izlerde varsayılan olarak yok, etki analizinde var.
+  - **Sınırlar:** derinlik ve düğüm sınırı (varsayılan 40 / 2000) aşılırsa sonuç `truncated` işaretleniyor ve daraltma
+    öneriliyor.
+  - **Orkestrasyon:** adımlar kod sırasıyla 1, 2, 3… numaralanıyor; ara metot zinciri `via` alanında.
+- **D20. REST eklemeleri:** PRD tablosuna `GET /api/analysis` (analiz listesi), `GET /api/endpoints` (endpoint listesi)
+  ve karşılıkları `list_analysis_runs`, `list_endpoints` eklendi. Hatalar RFC 9457 problem detayı olarak dönüyor: 404
+  bulunamadı, 400 geçersiz parametre ya da belirsiz referans, 409 analiz zaten çalışıyor.
+- **D21. MCP sunucusu:**
+  - **Taşıma:** resmî Java SDK (2.0.1), Streamable HTTP, `/mcp` yolunda ayrı servlet. stdio için
+    `java -jar … --mcp-stdio-bridge` (ayrıntılar `docs/mcp.md`'de).
+  - **Sonuçlar:** her araç özet metin ve yapılandırılmış JSON döndürüyor. Token tasarrufu için iz araçlarında alt graf
+    yalnızca `includeGraph=true` ile geliyor; etki analizinde en yakın 100 düğüm listeleniyor (sayımlar her zaman tam).
+  - **Hatalar:** sorgu hataları protokol hatası değil, araç hatası (`isError`) olarak dönüyor; AI düzeltip tekrar
+    deneyebiliyor.
+  - **Parite:** her `/api` uç noktası `@McpEquivalent("araç")` ya da `@RestOnly("gerekçe")` taşımak zorunda.
+    `McpParityTest` iki yönlü eşleşmeyi kontrol ediyor; eşleşmezse build kırılıyor.

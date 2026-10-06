@@ -10,7 +10,7 @@ import java.util.List;
 public record Orchestration(NodeSummary endpoint, NodeSummary handler, List<Step> steps, boolean truncated) {
 
     /**
-     * @param path        hiyerarşik sıra, ör. {@code 2.1}: handler'ın 2. çağrısının içindeki 1. çağrı
+     * @param order       kod sırasına göre 1'den başlayan adım numarası (yalnızca Feign/DB adımları sayılır)
      * @param kind        {@code FEIGN} ya da {@code REPOSITORY}
      * @param via         handler'dan bu çağrıya kadar geçilen metotlar
      * @param conditional bu çağrı ya da yolu üzerindeki bir çağrı koşullu
@@ -20,7 +20,7 @@ public record Orchestration(NodeSummary endpoint, NodeSummary handler, List<Step
      * @param access      repository için {@code READ}/{@code WRITE}
      */
     public record Step(
-            String path,
+            int order,
             String kind,
             String nodeId,
             String name,
