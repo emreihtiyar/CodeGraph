@@ -21,6 +21,10 @@ Faz 0 ölçümleri (Symbol Solver çözme oranı, TSX grammar'ı) için gerçek 
 - **Varsayım:** `backend/src/test/resources/fixtures/mini-system` altındaki sentetik mini sistemle ilerleniyor (NFR-09).
   Gerçek repoların yerel yollarını verirsen `codegraph-repos.yml` ile ölçüm yapabilirim.
 - Cevap: reporları şimdi veremiyorum ancak kodların konumları application.yml'dan değiştirilebilir olsun
+- **Uygulama (M5):** Repolar doğrudan `application.yml` içinde `codegraph.repos` listesi olarak tanımlanabilecek
+  (alanlar `codegraph-repos.yml` ile aynı). Alternatif olarak `codegraph.repos-file` ile ayrı bir dosya gösterilebilir.
+  İkisi de verilirse `application.yml`'deki liste kullanılır. Ortam değişkeniyle de ezilebilir, örneğin
+  `CODEGRAPH_REPOS_0_PATH=/repos/credit-api`.
 
 ### Q4. Commit'ler
 Şu ana kadar hiçbir şey commit edilmedi; değişiklikler çalışma ağacında duruyor.
@@ -33,6 +37,37 @@ Getter/setter çağrıları (Lombok ve record accessor'ları dahil) `CALLS` kena
 bunları gizleyecek.
 - **Varsayım:** Kayıtta tutulup gösterimde filtrelenecek (`includeAccessors=false` varsayılanı).
 - Cevap: varsayım ile ilerleyelim
+
+## Frontend (M4)
+
+### Q6. Gerçek ApiCalls dosyalarındaki HTTP istemcisi
+Şu kalıplar tanınıyor:
+- `fetch(url, { method })`;
+- `axios(config)`, `axios.get(url)` vb.;
+- `axios.create({ baseURL })` ile oluşturulmuş istemciler (taban adres URL'nin önüne ekleniyor);
+- path'e benzeyen URL ile çağrılan genel istemciler (`http.get('/x')`);
+- tek `return`'lü yardımcı fonksiyonlar (`buildUrl(...)`) ve içinde HTTP çağrısı olan yardımcılar (`request('POST', url)`), en fazla 3 seviye.
+
+Sınıf tabanlı servisler (`class ScoringApi { getScore() {...} }` + `export default new ScoringApi()`) ve
+interceptor'la değişen URL'ler tanınmıyor. HTTP çağrısı bulunamayan export'lar sorun olarak raporlanıyor.
+- **Varsayım:** ApiCalls dosyaları export edilen fonksiyonlardan (veya fonksiyon içeren export edilmiş nesne
+  literallerinden) oluşuyor ve yukarıdaki istemcilerden birini kullanıyor. Farklıysa bir örnek dosya iletirsen
+  ona göre genişletirim.
+- Cevap:
+
+### Q7. Gateway URL yapısı
+Frontend URL'i `<gateway taban adresi>/<BFF gateway prefix'i>/<BFF path'i>` kabul ediliyor. Gateway taban adresi bir
+ortam değişkeni olabilir (`import.meta.env.X`, `process.env.X`, `window._env_.X`), mutlak bir adresin host'u olabilir
+ya da `/` ile başlayan göreli URL'lerde proxy olabilir. Gateway ile BFF prefix'i arasında ortak bir ek varsa
+(ör. `/api/leasing-credit-bff/...`), ilk segment yanlışlıkla `api` olur.
+- **Varsayım:** Ortak ek yok. Varsa repo yapılandırmasına `gatewayBasePath` (ör. `/api`) eklerim.
+- Cevap:
+
+### Q8. Import takma adları
+tsconfig/jsconfig `paths` + `baseUrl` (ve `extends`) okunuyor. `vite.config` / webpack `resolve.alias` okunmuyor.
+tsconfig'te tanım yoksa `@/…` ve `~/…`, `src/…` kabul ediliyor.
+- **Varsayım:** Bu yeterli. Gerçek projede farklı bir alias varsa repo yapılandırmasına `aliases` haritası eklerim.
+- Cevap:
 
 ## Tasarım kararları (bilgi amaçlı)
 
@@ -58,3 +93,25 @@ bunları gizleyecek.
   `AMBIGUOUS` çağrıda her aday için ayrı bir kenar var ve hepsi aynı `order` değerini taşıyor.
 - **D10. `@Primary` / `@Qualifier`:** Birden çok implementasyon varsa bu ipuçlarıyla daraltılıyor. Daraltılamazsa sonuç
   `AMBIGUOUS` kalıyor.
+- **D11. TSX grameri:** grammars-v4'te TSX grameri yok. TypeScript lexer/parser'ına JSX modları eklenerek tek
+  bir `Tsx` grameri yazıldı (MIT, kaynak notu dosya başında). Gerçek kodda çıkan eksikler giderildi: `import type`,
+  indexed access ve tuple tipleri, `as const`, `satisfies`, `?.()`, generic ok fonksiyonu. Ayrıca gramerdeki aşırı
+  serbest kurallar daraltıldı: anahtar sözcüksüz değişken bildirimi, parantezsiz tipli ok fonksiyonu ve
+  `f<A<B>, C>(x)` belirsizliği. Böylece hızlı SLL modu, gerçek dosyalarda yavaş LL moduna düşmüyor.
+  12 bin satırlık bir TSX dosyası JVM'deki ilk ayrıştırmada ~18 sn sürüyor (ANTLR DFA önbelleğinin ısınması).
+  Sonraki dosyalarda aynı dosya ~50 ms. Önbellek JVM boyunca paylaşılıyor; yani bu maliyet analiz başına bir kez
+  ödeniyor.
+- **D12. ApiCall URL'i:** `urlTemplate` değerlendirilmiş biçimde tutuluyor: gateway için `{gateway}`, dinamik kısımlar
+  için `{*}` (ör. `{gateway}/leasing-credit-bff/applications/{*}`). Gateway sonrası ilk segment `targetPrefix` (BFF'in
+  gateway prefix'i); kalan kısım `normalizedPath` oluyor. İlk segment statik değilse ikisi de `null` kalıyor ve
+  bağlantı `UNRESOLVED` sayılıyor. Kaynaktaki asıl ifade `code` alanında duruyor.
+- **D13. Component ve kullanımlar:**
+  - Component olarak sayılanlar:
+    - büyük harfle başlayan ve JSX içeren üst düzey fonksiyon veya sınıf;
+    - `memo`/`forwardRef` vb. sarmalayıcıya verilen satır içi fonksiyon;
+    - adsız varsayılan export (adı dosyadan geliyor).
+  - Component anahtarı `dosya#bildirimAdı`.
+  - Projedeki `useX` hook'ları çağrıldıkları yerde component'e açılıyor. Hook'tan gelen kullanımın satırı, component'teki çağrı satırı.
+  - Aynı ApiCall aynı yolla (via/hook) birden çok kez kullanılırsa tek kullanım sayılıyor.
+  - Route `element`'i sarmalayıcı içeriyorsa (`<Suspense>`, `<RequireAuth>`) en içteki proje component'i ekran oluyor.
+  - Path'siz layout route'ları ekran sayılmıyor.
