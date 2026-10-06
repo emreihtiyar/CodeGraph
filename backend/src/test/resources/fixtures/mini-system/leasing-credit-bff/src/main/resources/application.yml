@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: leasing-credit-bff
+
+clients:
+  credit:
+    name: credit-api

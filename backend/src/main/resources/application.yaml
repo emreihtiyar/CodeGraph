@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: CodeGraph
+
+codegraph:
+  # Analiz edilecek repoları tanımlayan YAML (PRD FR-01). Göreli yollar çalışma dizinine göredir.
+  repos-file: ./codegraph-repos.yml
+  neo4j:
+    data-dir: ./.codegraph/neo4j

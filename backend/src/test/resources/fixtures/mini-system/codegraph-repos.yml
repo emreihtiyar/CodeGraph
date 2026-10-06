@@ -1,0 +1,28 @@
+# Mini sistem (PRD NFR-09): 1 frontend, 2 BFF, 2 API, 1 adaptör.
+placeholders: {}
+
+repos:
+  - name: leasing-web
+    path: leasing-web
+    layer: FRONTEND
+
+  - name: leasing-credit-bff
+    path: leasing-credit-bff
+    layer: BFF
+
+  - name: scoring-bff
+    path: scoring-bff
+    layer: BFF
+    gatewayPrefix: scoring
+
+  - name: credit-api
+    path: credit-api
+    layer: API
+
+  - name: sales-api
+    path: sales-api
+    layer: API
+
+  - name: core-adapter
+    path: core-adapter
+    layer: ADAPTER
