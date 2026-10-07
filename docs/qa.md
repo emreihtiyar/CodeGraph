@@ -96,6 +96,30 @@ herkes API'yi çağırabilir. Kaynak kodu (`get_code`) da bu yolla okunabiliyor.
   için `server.address=127.0.0.1` önerilir. Ortak sunucuya kurulacaksa token/SSO eklenmeli.
 - Cevap:
 
+## Arayüz (M7)
+
+### Q12. Arayüzün sunulması
+UI şu an ayrı bir Vite uygulaması: geliştirmede `npm run dev` (5173, `/api` istekleri 8080'e proxy'leniyor), üretimde
+`npm run build` çıktısı `frontend/dist`. Jar UI'ı içermiyor.
+- **Varsayım:** MVP için iki süreç yeterli. İstenirse Maven build'i `frontend/dist`'i `static/` altına kopyalayıp tek jar
+  hâline getirebilir (Node'un build makinesinde olmasını gerektirir).
+- Cevap:
+
+### Q13. Frontend geliştirme bağımlılıkları (NFR-07)
+Çalışma zamanı bağımlılıkları PRD'deki liste: React, Cytoscape, cytoscape-dagre, Prism. Geliştirme tarafında Vite,
+TypeScript, `@vitejs/plugin-react`, `@types/*` ve testler için **Vitest** var. Vitest PRD'de geçmiyor ama Vite ile aynı
+yapılandırmayı kullanıyor ve pakete girmiyor.
+- **Varsayım:** Vitest kalsın. Yalnızca saf modüller test ediliyor (yönlendirme, graf elemanları, kod satırları, ağaç
+  güncelleme); bileşen testi ve tarayıcı test aracı eklenmedi.
+- Cevap:
+
+### Q14. Kod panelinde çağrı yeri mi, çağrılan mı?
+FR-21 kod panelinin "ilgili satır vurgulu" açılmasını istiyor. Bir kenar (çağrı) için ilgili satır iki yerde olabilir:
+çağıran metottaki çağrı satırı ve çağrılan metodun kendisi.
+- **Varsayım:** İkisi de sekme olarak açılıyor. İlk sekme çağrı yeri (satır vurgulu, görünür alana kaydırılmış), ikinci
+  sekme çağrılan metot. Çağrı ağacında satıra tıklayınca sıra ters: önce metot, sonra çağrı yeri.
+- Cevap:
+
 ## Tasarım kararları (bilgi amaçlı)
 
 - **D1. Java düğümlerinin anahtarı `repo + fqn`:** PRD §8.6 `Method.fqn` ve `Class.fqn` için global benzersizlik istiyordu.
@@ -197,3 +221,16 @@ herkes API'yi çağırabilir. Kaynak kodu (`get_code`) da bu yolla okunabiliyor.
     deneyebiliyor.
   - **Parite:** her `/api` uç noktası `@McpEquivalent("araç")` ya da `@RestOnly("gerekçe")` taşımak zorunda.
     `McpParityTest` iki yönlü eşleşmeyi kontrol ediyor; eşleşmezse build kırılıyor.
+- **D22. Arayüz yapısı:**
+  - **Yönlendirme:** hash tabanlı (`#/trace?from=…&dir=backward`). Her görünüm paylaşılabilir bir bağlantı;
+    yönlendirme kütüphanesi kullanılmadı.
+  - **Sistem görünümü:** sütunlar katman sırasında (Frontend → BFF → API → Adaptör → Kütüphane → Analiz dışı). Tabloları
+    olan servisler tek bir "Veritabanı" düğümüne bağlanıyor; kenarda tablo sayısı yazıyor (`/api/services`'e
+    `tableCount` eklendi). Tablolar sistem görünümünde tek tek çizilmiyor, ayrıntı servis panelinde ve izde.
+  - **İz görünümü:** düğümler servis kutuları (compound) içinde, dagre ile soldan sağa yerleşiyor. Çağrı kenarlarında
+    çağıran başına 1..n sıra numarası ve koşul/döngü/async/lambda işaretleri var. Geniş graflarda yazılar okunur
+    kalsın diye tamamı sığdırılmıyor, başlangıç düğümünden başlanıyor; ⤢ düğmesi tamamını gösteriyor.
+  - **Çağrı ağacı:** ilk istekte seçilen derinlik geliyor, sonraki seviyeler tıklayınca tek seviye yükleniyor. Atalar
+    backend'e gönderildiği için özyineleme tembel yüklemede de doğru işaretleniyor.
+  - **Analiz bitişi:** RUNNING iken saniyede bir yoklanıyor. Analiz bitince açık görünümler kendiliğinden yeniden
+    yükleniyor.

@@ -75,8 +75,12 @@ public class GraphQueryService {
                 OPTIONAL MATCH (s)-[:EXPOSES]->(e:Endpoint)
                 WITH s, count(e) AS endpoints
                 OPTIONAL MATCH (s)-[:HAS_SCREEN]->(x:Screen)
-                RETURN s, endpoints, count(x) AS screens""", params("layer", layer == null ? null : layer.name()))) {
-            services.add(service((GraphNode) row.get("s"), (Long) row.get("endpoints"), (Long) row.get("screens")));
+                WITH s, endpoints, count(x) AS screens
+                OPTIONAL MATCH (:RepositoryMethod {service: s.name})-[:READS|WRITES]->(:Entity)-[:MAPPED_TO]->(t:Table)
+                RETURN s, endpoints, screens, count(DISTINCT t) AS tables""",
+                params("layer", layer == null ? null : layer.name()))) {
+            services.add(service((GraphNode) row.get("s"), (Long) row.get("endpoints"), (Long) row.get("screens"),
+                    (Long) row.get("tables")));
         }
         services.sort(Comparator.comparingInt((ServiceList.Service s) -> layerRank(s.layer()))
                 .thenComparing(ServiceList.Service::name));
@@ -94,7 +98,7 @@ public class GraphQueryService {
         GraphNode node = store.query("MATCH (s:Service {name: $name}) RETURN s", Map.of("name", name)).stream()
                 .findFirst().map(r -> (GraphNode) r.get("s"))
                 .orElseThrow(() -> new NotFoundException("Servis bulunamadı: " + name));
-        ServiceList.Service service = service(node, 0, 0);
+        ServiceList.Service service = service(node, 0, 0, 0);
         List<ServiceDependencies.Dependency> outgoing = new ArrayList<>();
         for (Map<String, Object> row : store.query("""
                 MATCH (:Service {name: $name})-[d:DEPENDS_ON]->(t:Service)
@@ -137,11 +141,11 @@ public class GraphQueryService {
                 Boolean.TRUE.equals(p.get("analyzed")), calls, links);
     }
 
-    private static ServiceList.Service service(GraphNode s, long endpoints, long screens) {
+    private static ServiceList.Service service(GraphNode s, long endpoints, long screens, long tables) {
         Map<String, Object> p = s.properties();
         return new ServiceList.Service(s.id(), (String) p.get("name"), (String) p.get("layer"), (String) p.get("repo"),
                 (String) p.get("contextPath"), (String) p.get("gatewayPrefix"), Boolean.TRUE.equals(p.get("analyzed")),
-                endpoints, screens);
+                endpoints, screens, tables);
     }
 
     /** @param service null ise tüm frontend'lerin ekranları */

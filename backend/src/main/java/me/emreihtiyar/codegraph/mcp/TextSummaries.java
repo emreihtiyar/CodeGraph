@@ -41,6 +41,9 @@ final class TextSummaries {
             if (s.screenCount() > 0) {
                 sb.append(", ").append(s.screenCount()).append(" ekran");
             }
+            if (s.tableCount() > 0) {
+                sb.append(", ").append(s.tableCount()).append(" tablo");
+            }
             if (s.gatewayPrefix() != null) {
                 sb.append(", gateway /").append(s.gatewayPrefix());
             }

@@ -35,6 +35,9 @@ class GraphQueryServiceTest {
         assertThat(list.dependencies()).hasSize(9);
         assertThat(list.services().get(0).screenCount()).isEqualTo(2);
         assertThat(list.services().get(3).endpointCount()).isEqualTo(4);
+        assertThat(list.services()).extracting(ServiceList.Service::name, ServiceList.Service::tableCount)
+                .contains(tuple("credit-api", 2L), tuple("sales-api", 2L), tuple("core-adapter", 1L),
+                        tuple("leasing-credit-bff", 0L));
 
         assertThat(queries.listServices(Layer.BFF).services()).extracting(ServiceList.Service::name)
                 .containsExactly("leasing-credit-bff", "scoring-bff");

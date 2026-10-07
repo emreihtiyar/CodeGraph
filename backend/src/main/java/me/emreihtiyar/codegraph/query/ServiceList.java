@@ -17,7 +17,8 @@ public record ServiceList(List<Service> services, List<Dependency> dependencies)
             String gatewayPrefix,
             boolean analyzed,
             long endpointCount,
-            long screenCount) {}
+            long screenCount,
+            long tableCount) {}
 
     public record Dependency(String from, String to, long callCount) {}
 }
