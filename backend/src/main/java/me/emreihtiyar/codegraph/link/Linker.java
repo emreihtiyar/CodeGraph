@@ -48,7 +48,15 @@ public class Linker {
         // Repo adı ve alias'lar, gerçek servis adlarını ezmesin diye sonra eklenir.
         for (RepoFacts repo : targets) {
             services.putIfAbsent(lower(repo.repoName()), repo);
+            services.putIfAbsent(lower(lastDotted(repo.service().name())), repo);
             aliases.getOrDefault(repo.repoName(), List.of()).forEach(a -> services.putIfAbsent(lower(a), repo));
+            if (repo.layer() == Layer.BFF) {
+                // Gateway prefix'i çoğu zaman servis adının kendisi değil: 'LEASING.NGLA.leasing-contract-bff' →
+                // URL'de 'leasing-contract-bff'. Yedek olarak repo adı, noktalı adın son parçası ve alias'lar denenir.
+                bffsByPrefix.putIfAbsent(lower(repo.repoName()), repo);
+                bffsByPrefix.putIfAbsent(lower(lastDotted(repo.service().name())), repo);
+                aliases.getOrDefault(repo.repoName(), List.of()).forEach(a -> bffsByPrefix.putIfAbsent(lower(a), repo));
+            }
         }
         return new LinkResult(linkApiCalls(repos, bffsByPrefix), linkFeign(repos, services));
     }
@@ -170,5 +178,10 @@ public class Linker {
 
     private static String lower(String s) {
         return s == null ? null : s.toLowerCase(Locale.ROOT);
+    }
+
+    /** {@code LEASING.NGLA.leasing-contract-bff} → {@code leasing-contract-bff}. */
+    private static String lastDotted(String name) {
+        return name.substring(name.lastIndexOf('.') + 1);
     }
 }

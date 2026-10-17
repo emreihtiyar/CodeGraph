@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import me.emreihtiyar.codegraph.MiniSystem;
 import me.emreihtiyar.codegraph.config.Layer;
+import me.emreihtiyar.codegraph.extract.model.ApiCallFact;
 import me.emreihtiyar.codegraph.extract.model.EndpointFact;
 import me.emreihtiyar.codegraph.extract.model.FeignClientFact;
 import me.emreihtiyar.codegraph.extract.model.FeignMethodFact;
@@ -112,6 +113,27 @@ class LinkerTest {
                 .containsExactly(
                         tuple("OrderClient#put", 0, Resolution.UNRESOLVED),
                         tuple("OrderClient#anyItem", 2, Resolution.AMBIGUOUS));
+    }
+
+    @Test
+    void bffWithNamespacedServiceNameMatchesByLastSegmentAndRepoName() {
+        // spring.application.name 'LEASING.NGLA.leasing-contract-bff', URL'de yalnızca 'leasing-contract-bff'
+        String name = "LEASING.NGLA.leasing-contract-bff";
+        var bff = RepoFacts.empty("contract-bff-repo", Layer.BFF, new ServiceFact(name, Layer.BFF, "", name));
+        bff.endpoints().add(new EndpointFact(HttpMethod.GET, "/api/contracts/{id}", "/api/contracts/{*}", "x"));
+        var web = RepoFacts.empty("contract-ui", Layer.FRONTEND, new ServiceFact("contract-ui", Layer.FRONTEND, "", null));
+        web.apiCalls().add(apiCall("a", "leasing-contract-bff"));
+        web.apiCalls().add(apiCall("b", "contract-bff-repo"));
+
+        LinkResult r = new Linker().link(List.of(web, bff), Map.of());
+
+        assertThat(r.apiCalls()).extracting(LinkerTest::target)
+                .containsOnly(name + " GET /api/contracts/{*}");
+    }
+
+    private static ApiCallFact apiCall(String key, String prefix) {
+        return new ApiCallFact(key, key, HttpMethod.GET, "{gateway}/" + prefix + "/api/contracts/{*}",
+                "/api/contracts/{*}", prefix, null, "");
     }
 
     private static FeignMethodFact feign(String fqn, HttpMethod m, String path) {
