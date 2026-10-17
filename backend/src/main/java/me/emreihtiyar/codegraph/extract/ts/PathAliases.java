@@ -61,14 +61,17 @@ public final class PathAliases {
         if (depth > 5) {
             return;
         }
-        JsonNode json;
         try {
-            json = JSON.readTree(Files.readString(file));
+            readConfig(root, file, paths, baseUrl, issues, depth);
         } catch (IOException | RuntimeException e) {
             issues.add(new ParseIssue(root.relativize(file).toString().replace('\\', '/'), 0,
                     "tsconfig okunamadı: " + e.getMessage()));
-            return;
         }
+    }
+
+    private static void readConfig(Path root, Path file, Map<String, List<String>> paths, String[] baseUrl,
+            List<ParseIssue> issues, int depth) throws IOException {
+        JsonNode json = JSON.readTree(Files.readString(file));
         // extends önce okunur; dosyanın kendi ayarları üstüne yazar
         JsonNode ext = json.path("extends");
         if (ext.isString() && ext.asString().startsWith(".")) {
@@ -89,10 +92,15 @@ public final class PathAliases {
         }
         JsonNode p = options.path("paths");
         if (p.isObject()) {
+            // Hedefler '*' içerir; Windows'ta Path'e çevrilemediği için metin olarak birleştirilir
+            String baseRel = relative(root, base);
             for (var entry : p.properties()) {
                 List<String> targets = new ArrayList<>();
                 for (JsonNode t : entry.getValue()) {
-                    targets.add(relative(root, base.resolve(t.asString()).normalize()));
+                    String target = JsProject.normalize(baseRel.isEmpty() ? t.asString() : baseRel + "/" + t.asString());
+                    if (target != null) {
+                        targets.add(target);
+                    }
                 }
                 paths.put(entry.getKey(), targets);
             }
