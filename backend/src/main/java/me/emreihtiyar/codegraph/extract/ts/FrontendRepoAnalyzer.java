@@ -1,14 +1,12 @@
 package me.emreihtiyar.codegraph.extract.ts;
 
 import java.io.IOException;
-import java.nio.charset.MalformedInputException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import me.emreihtiyar.codegraph.config.RepoDefinition;
+import me.emreihtiyar.codegraph.extract.SourceText;
 import me.emreihtiyar.codegraph.extract.model.ApiCallFact;
 import me.emreihtiyar.codegraph.extract.model.ParseIssue;
 import me.emreihtiyar.codegraph.extract.model.RepoFacts;
@@ -80,11 +78,7 @@ public class FrontendRepoAnalyzer {
     }
 
     private static String read(Path file) throws IOException {
-        try {
-            return Files.readString(file, StandardCharsets.UTF_8);
-        } catch (MalformedInputException e) {
-            return Files.readString(file, StandardCharsets.ISO_8859_1);
-        }
+        return SourceText.read(file);
     }
 
     private static int lineOf(String error) {

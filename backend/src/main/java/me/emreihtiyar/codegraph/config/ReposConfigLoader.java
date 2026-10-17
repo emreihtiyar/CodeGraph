@@ -2,7 +2,9 @@ package me.emreihtiyar.codegraph.config;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.io.StringReader;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -12,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import me.emreihtiyar.codegraph.extract.SourceText;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -101,7 +104,7 @@ public class ReposConfigLoader {
             errors.add("Dosya bulunamadı");
             return null;
         }
-        try (Reader reader = Files.newBufferedReader(source)) {
+        try (Reader reader = new StringReader(SourceText.read(source))) {
             return new Yaml(new SafeConstructor(new LoaderOptions())).load(reader);
         } catch (IOException | YAMLException e) {
             errors.add("Dosya okunamadı: " + e.getMessage());
@@ -169,7 +172,13 @@ public class ReposConfigLoader {
         if (raw == null) {
             return null;
         }
-        Path path = baseDir.resolve(raw).toAbsolutePath().normalize();
+        Path path;
+        try {
+            path = baseDir.resolve(raw).toAbsolutePath().normalize();
+        } catch (InvalidPathException e) {
+            errors.add(where + ": 'path' geçersiz: " + e.getMessage());
+            return null;
+        }
         if (!Files.isDirectory(path)) {
             errors.add(where + ": 'path' bir dizin değil: " + path);
             return null;

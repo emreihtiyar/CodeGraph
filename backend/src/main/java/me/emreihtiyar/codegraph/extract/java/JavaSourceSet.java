@@ -11,8 +11,6 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSol
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -25,6 +23,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import me.emreihtiyar.codegraph.extract.SourceText;
 import me.emreihtiyar.codegraph.extract.model.ParseIssue;
 
 /**
@@ -74,7 +73,7 @@ public final class JavaSourceSet {
         for (Path relative : sources) {
             Path file = repoRoot.resolve(relative);
             try {
-                String text = Files.readString(file, StandardCharsets.UTF_8);
+                String text = SourceText.read(file);
                 texts.put(relative, text);
                 sourceRoot(file, text).ifPresent(sourceRoots::add);
             } catch (IOException | RuntimeException e) {
@@ -151,7 +150,7 @@ public final class JavaSourceSet {
         for (Path relative : sources) {
             Path file = repoRoot.resolve(relative);
             try {
-                sourceRoot(file, Files.readString(file, StandardCharsets.UTF_8)).ifPresent(roots::add);
+                sourceRoot(file, SourceText.read(file)).ifPresent(roots::add);
             } catch (IOException | RuntimeException e) {
                 // Okunamayan dosya parse aşamasında raporlanır
             }

@@ -2,7 +2,7 @@ package me.emreihtiyar.codegraph.extract.java;
 
 import java.io.IOException;
 import java.io.Reader;
-import java.nio.file.Files;
+import java.io.StringReader;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import me.emreihtiyar.codegraph.extract.SourceText;
 import me.emreihtiyar.codegraph.extract.model.ParseIssue;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -119,7 +120,7 @@ public final class SpringProperties {
     private static List<Map<String, String>> read(Path file) throws IOException {
         String name = file.getFileName().toString();
         List<Map<String, String>> docs = new ArrayList<>();
-        try (Reader reader = Files.newBufferedReader(file)) {
+        try (Reader reader = new StringReader(SourceText.read(file))) {
             if (name.endsWith(".properties")) {
                 Properties props = new Properties();
                 props.load(reader);

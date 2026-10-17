@@ -4,9 +4,11 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import me.emreihtiyar.codegraph.extract.ts.Js.Call;
 import me.emreihtiyar.codegraph.extract.ts.Js.Func;
 import me.emreihtiyar.codegraph.extract.ts.Js.Ident;
@@ -55,10 +57,13 @@ public final class JsProject {
     }
 
     private final Map<String, JsModule> modules = new LinkedHashMap<>();
+    /** Büyük-küçük harf duyarsız yedek: Windows'ta {@code ./button} import'u {@code Button.tsx}'e de çözülür. */
+    private final Map<String, JsModule> modulesIgnoreCase = new LinkedHashMap<>();
     private final PathAliases aliases;
 
     public JsProject(Collection<JsModule> modules, PathAliases aliases) {
         modules.forEach(m -> this.modules.put(m.path(), m));
+        modules.forEach(m -> modulesIgnoreCase.putIfAbsent(m.path().toLowerCase(Locale.ROOT), m));
         this.aliases = aliases;
     }
 
@@ -92,19 +97,26 @@ public final class JsProject {
         if (base == null) {
             return Optional.empty();
         }
-        if (modules.containsKey(base)) {
-            return Optional.of(modules.get(base));
+        Optional<JsModule> exact = candidates(base, modules::get);
+        return exact.isPresent()
+                ? exact
+                : candidates(base.toLowerCase(Locale.ROOT), modulesIgnoreCase::get);
+    }
+
+    private static Optional<JsModule> candidates(String base, Function<String, JsModule> lookup) {
+        if (lookup.apply(base) != null) {
+            return Optional.of(lookup.apply(base));
         }
         // ESM tarzı TS import'u: './x.js' → x.ts
         String stripped = base.replaceFirst("\\.(js|jsx|mjs|cjs)$", "");
         for (String ext : EXTENSIONS) {
-            JsModule m = modules.get(stripped + ext);
+            JsModule m = lookup.apply(stripped + ext);
             if (m != null) {
                 return Optional.of(m);
             }
         }
         for (String ext : EXTENSIONS) {
-            JsModule m = modules.get(base + "/index" + ext);
+            JsModule m = lookup.apply(base + "/index" + ext);
             if (m != null) {
                 return Optional.of(m);
             }

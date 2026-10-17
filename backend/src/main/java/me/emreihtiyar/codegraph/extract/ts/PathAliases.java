@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import me.emreihtiyar.codegraph.extract.SourceText;
 import me.emreihtiyar.codegraph.extract.model.ParseIssue;
 import tools.jackson.core.json.JsonReadFeature;
 import tools.jackson.databind.JsonNode;
@@ -71,7 +72,7 @@ public final class PathAliases {
 
     private static void readConfig(Path root, Path file, Map<String, List<String>> paths, String[] baseUrl,
             List<ParseIssue> issues, int depth) throws IOException {
-        JsonNode json = JSON.readTree(Files.readString(file));
+        JsonNode json = JSON.readTree(SourceText.read(file));
         // extends önce okunur; dosyanın kendi ayarları üstüne yazar
         JsonNode ext = json.path("extends");
         if (ext.isString() && ext.asString().startsWith(".")) {
