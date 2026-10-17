@@ -3,7 +3,8 @@ import { api } from '../api/client.ts';
 import type { EdgeView, NodeSummary, TraceResult } from '../api/types.ts';
 import { GraphCanvas } from '../components/GraphCanvas.tsx';
 import { NodeInspector } from '../components/NodeInspector.tsx';
-import { Badge, Empty, ErrorBox, NodeLine, Spinner, Toggle } from '../components/ui.tsx';
+import { StartPicker } from '../components/StartPicker.tsx';
+import { Badge, ErrorBox, NodeLine, Spinner, Toggle } from '../components/ui.tsx';
 import { CALL_TYPES, traceElements } from '../lib/graphElements.ts';
 import { LABELS, LAYER_TITLES } from '../lib/labels.ts';
 import { navigate } from '../lib/route.ts';
@@ -16,6 +17,8 @@ export interface TraceParams {
   depth?: string;
   prune?: string;
   acc?: string;
+  /** Başlangıç seçicide seçili servis. */
+  svc?: string;
 }
 
 /** Akış izleme (FR-16 ileri, FR-17 geri): alt graf, özet ve kod paneli bağlantısı. */
@@ -40,7 +43,18 @@ export function TraceView({ params }: { params: TraceParams }) {
 
   const update = (changes: Partial<TraceParams>) => navigate('trace', { ...params, ...changes });
 
-  if (!params.from) return <StartPicker />;
+  if (!params.from) {
+    return (
+      <StartPicker
+        title="İzlenecek başlangıcı seçin"
+        hint="Servis seçip bir ekrandan ya da endpoint'ten tablolara kadar ileri iz alın. Tablo veya entity'den geri iz için üstteki aramayı kullanın."
+        withScreens
+        service={params.svc}
+        onService={(svc) => navigate('trace', { svc })}
+        onPick={(from) => navigate('trace', { svc: params.svc, from, dir: 'forward' })}
+      />
+    );
+  }
 
   const onEdgeTap = (data: Record<string, unknown>) => {
     const edge = trace.data?.graph.edges[data.edgeIndex as number];
@@ -195,40 +209,6 @@ function Legend() {
       <span><b>λ</b> lambda</span>
       <span className="legend-line requests">HTTP</span>
       <span className="legend-line writes">yazma</span>
-    </div>
-  );
-}
-
-function StartPicker() {
-  const { graphVersion } = useAppState();
-  const screens = useAsync((signal) => api.screens(undefined, signal), [graphVersion]);
-  const endpoints = useAsync((signal) => api.endpoints(undefined, signal), [graphVersion]);
-  return (
-    <div className="view padded">
-      <Empty title="İzlenecek başlangıcı seçin">
-        <p>Bir ekrandan ya da endpoint'ten tablolara kadar ileri iz alın. Tablo veya entity'den geri iz için üstteki arama
-          kutusunda adını arayın.</p>
-      </Empty>
-      <div className="picker-columns">
-        <section>
-          <h3>Ekranlar</h3>
-          {screens.error && <ErrorBox error={screens.error} />}
-          {screens.data?.map((s) => (
-            <button key={s.id} type="button" className="picker-item" onClick={() => navigate('trace', { from: s.id, dir: 'forward' })}>
-              <span className="mono">{s.routePath}</span> <span className="muted small">{s.name} · {s.service}</span>
-            </button>
-          ))}
-        </section>
-        <section>
-          <h3>Endpoint'ler</h3>
-          {endpoints.error && <ErrorBox error={endpoints.error} />}
-          {endpoints.data?.map((e) => (
-            <button key={e.id} type="button" className="picker-item" onClick={() => navigate('trace', { from: e.id, dir: 'forward' })}>
-              <span className="muted small">{e.service}</span> <span className="mono"><b>{e.httpMethod}</b> {e.path}</span>
-            </button>
-          ))}
-        </section>
-      </div>
     </div>
   );
 }

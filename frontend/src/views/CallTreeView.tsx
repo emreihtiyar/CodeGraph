@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.ts';
 import type { CallTreeNode, CallTreeOptions } from '../api/types.ts';
-import { Badge, Empty, ErrorBox, Spinner, Toggle } from '../components/ui.tsx';
+import { StartPicker } from '../components/StartPicker.tsx';
+import { Badge, ErrorBox, Spinner, Toggle } from '../components/ui.tsx';
 import { KIND_LABEL, LABELS } from '../lib/labels.ts';
 import { navigate } from '../lib/route.ts';
 import { ancestorIds, loadedKeys, nodeAt, pathKey, withChildren, type TreePath } from '../lib/tree.ts';
@@ -15,6 +16,8 @@ export interface TreeParams {
   acc?: string;
   cross?: string;
   hide?: string;
+  /** Kök seçicide seçili servis. */
+  svc?: string;
 }
 
 function options(params: TreeParams): CallTreeOptions {
@@ -53,7 +56,18 @@ export function CallTreeView({ params }: { params: TreeParams }) {
 
   const update = (changes: Partial<TreeParams>) => navigate('tree', { ...params, ...changes });
 
-  if (!params.root) return <RootPicker />;
+  if (!params.root) {
+    return (
+      <StartPicker
+        title="Çağrı ağacının kökünü seçin"
+        hint="Servis seçip bir endpoint seçin ya da üstteki arama kutusundan bir metot arayın."
+        withScreens={false}
+        service={params.svc}
+        onService={(svc) => navigate('tree', { svc })}
+        onPick={(root) => navigate('tree', { svc: params.svc, root })}
+      />
+    );
+  }
 
   const toggle = async (path: TreePath) => {
     if (!tree) return;
@@ -213,32 +227,4 @@ function Details({ node }: { node: CallTreeNode }) {
     return <span className="tree-details mono">{String(d.httpMethod ?? '')} {String(d.path ?? '')}</span>;
   }
   return null;
-}
-
-function RootPicker() {
-  const { graphVersion } = useAppState();
-  const endpoints = useAsync((signal) => api.endpoints(undefined, signal), [graphVersion]);
-  const byService = new Map<string, NonNullable<typeof endpoints.data>>();
-  endpoints.data?.forEach((e) => byService.set(e.service, [...(byService.get(e.service) ?? []), e]));
-  return (
-    <div className="view padded">
-      <Empty title="Çağrı ağacının kökünü seçin">
-        <p>Bir endpoint seçin ya da üstteki arama kutusundan bir metot arayın.</p>
-      </Empty>
-      {endpoints.error && <ErrorBox error={endpoints.error} />}
-      <div className="picker-columns">
-        {[...byService].map(([service, list]) => (
-          <section key={service}>
-            <h3>{service}</h3>
-            {list.map((e) => (
-              <button key={e.id} type="button" className="picker-item" onClick={() => navigate('tree', { root: e.id })}>
-                <span className="mono"><b>{e.httpMethod}</b> {e.path}</span>
-                {e.handler && <span className="muted small"> {e.handler}</span>}
-              </button>
-            ))}
-          </section>
-        ))}
-      </div>
-    </div>
-  );
 }
