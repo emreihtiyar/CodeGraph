@@ -32,6 +32,8 @@ const STYLE: StylesheetJson = [
       'background-color': '#ffffff',
       'border-width': 2,
       'border-color': 'data(color)',
+      // Okunamayacak kadar küçük yazılar çizilmesin; büyük graflarda kaydırma/zoom'u hafifletir.
+      'min-zoomed-font-size': 6,
     },
   },
   { selector: 'node[kind = "Table"]', style: { shape: 'barrel', 'background-color': '#fef3c7', height: 36 } },
@@ -93,6 +95,7 @@ const STYLE: StylesheetJson = [
       'text-background-opacity': 0.9,
       'text-background-padding': '2px',
       'text-background-shape': 'roundrectangle',
+      'min-zoomed-font-size': 6,
     },
   },
   { selector: 'edge.requests, edge.resolves_to', style: { 'line-color': '#2563eb', 'target-arrow-color': '#2563eb', width: 2.2 } },
@@ -151,7 +154,6 @@ export function GraphCanvas({ elements, layout, selectedId, onNodeTap, onEdgeTap
       layout: { name: 'preset', fit: false },
       minZoom: 0.1,
       maxZoom: 3,
-      wheelSensitivity: 0.25,
     });
     const run = cy.layout(layout === 'dagre' ? DAGRE : { name: 'preset', padding: 40 });
     run.one('layoutstop', () => keepReadable(cy));
@@ -161,8 +163,22 @@ export function GraphCanvas({ elements, layout, selectedId, onNodeTap, onEdgeTap
       if (data.kind !== 'ServiceGroup') handlers.current.onNodeTap?.(data.id, data);
     });
     cy.on('tap', 'edge', (e) => handlers.current.onEdgeTap?.(e.target.data()));
+    // Cytoscape birkaç piksellik sürüklemeyi de tap sayıyor; kaydırmaya başlarken seçim (ve panel) kapanmasın.
+    let pressedAt: { x: number; y: number } | null = null;
+    cy.on('tapstart', (e) => {
+      pressedAt = e.target === cy ? { ...e.renderedPosition } : null;
+    });
     cy.on('tap', (e) => {
-      if (e.target === cy) handlers.current.onBackgroundTap?.();
+      if (e.target !== cy || !pressedAt) return;
+      const moved = Math.hypot(e.renderedPosition.x - pressedAt.x, e.renderedPosition.y - pressedAt.y);
+      if (moved < 1) handlers.current.onBackgroundTap?.();
+    });
+    // Yan panel açılıp kapanınca tuval daralıp genişliyor; görünümün merkezi yerinde kalsın, graf zıplamasın.
+    let size = { w: cy.width(), h: cy.height() };
+    cy.on('resize', () => {
+      const pan = cy.pan();
+      cy.pan({ x: pan.x + (cy.width() - size.w) / 2, y: pan.y + (cy.height() - size.h) / 2 });
+      size = { w: cy.width(), h: cy.height() };
     });
     cyRef.current = cy;
     return () => {
