@@ -2,9 +2,11 @@ package me.emreihtiyar.codegraph.link;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import me.emreihtiyar.codegraph.config.Layer;
 import me.emreihtiyar.codegraph.extract.PathNormalizer;
 import me.emreihtiyar.codegraph.extract.model.ApiCallFact;
@@ -26,9 +28,10 @@ import org.springframework.stereotype.Component;
  *   <li><b>FeignClient → Service:</b> çözülmüş {@code name/value}; servis adı, repo adı veya {@code aliases} ile
  *       büyük-küçük harf duyarsız eşleşir.</li>
  *   <li><b>FeignMethod → Endpoint:</b> Feign path'i hedefin endpoint path'iyle (context-path dahil) eşleştirilir;
- *       eşleşme yoksa context-path eklenmiş hali, o da yoksa {@code @FeignClient(path)} ön eki atılmış hali denenir
- *       (ön ek analiz edilmeyen bir yerde tanımlı context-path'e ya da gateway yönlendirmesine karşılık
- *       gelebilir).</li>
+ *       eşleşme yoksa context-path eklenmiş hali denenir. O da yoksa ön ek atılmış haller denenir: {@code
+ *       @FeignClient(path)} ön eki ve hedefin adlarından biri (servis adı, repo adı, alias) olan ilk segment
+ *       ({@code @GetMapping("/leasing-contract/test")}). Böyle bir ön ek, analiz edilmeyen bir yerde tanımlı
+ *       context-path'e ya da gateway yönlendirmesine karşılık gelebilir.</li>
  * </ul>
  * HTTP metodu aynı olmalıdır ({@code ANY} her metotla eşleşir). Birden çok endpoint eşleşirse en özgül olan(lar)
  * seçilir (bkz. {@link #mostSpecific}); yine de birden fazla kalırsa sonuç {@link Resolution#AMBIGUOUS} olur.
@@ -122,7 +125,7 @@ public class Linker {
                 List<LinkResult.Link> methods = new ArrayList<>();
                 for (FeignMethodFact method : repo.feignMethods()) {
                     if (method.clientFqn().equals(client.fqn())) {
-                        methods.add(linkFeignMethod(repo, client, method, target));
+                        methods.add(linkFeignMethod(repo, client, method, target, services));
                     }
                 }
                 out.add(new LinkResult.FeignLink(repo.repoName(), client.fqn(),
@@ -134,7 +137,8 @@ public class Linker {
     }
 
     private static LinkResult.Link linkFeignMethod(
-            RepoFacts repo, FeignClientFact client, FeignMethodFact method, RepoFacts target) {
+            RepoFacts repo, FeignClientFact client, FeignMethodFact method, RepoFacts target,
+            Map<String, RepoFacts> services) {
         if (client.targetServiceName() == null) {
             return LinkResult.Link.unresolved(repo.repoName(), method.fqn(), null, "Feign adı çözülemedi: " + client.rawName());
         }
@@ -148,16 +152,24 @@ public class Linker {
         if (!contextPath.isEmpty()) {
             candidates.add(PathNormalizer.join(contextPath, method.normalizedPath()));
         }
+        Set<String> stripped = new LinkedHashSet<>();
         String withoutClientPath = withoutPrefix(method.normalizedPath(), PathNormalizer.normalize(client.path()));
         if (withoutClientPath != null) {
-            candidates.add(withoutClientPath);
+            stripped.add(withoutClientPath);
+        }
+        String withoutServiceName = withoutTargetName(method.normalizedPath(), target, services);
+        if (withoutServiceName != null) {
+            stripped.add(withoutServiceName);
+        }
+        for (String path : stripped) {
+            candidates.add(path);
             if (!contextPath.isEmpty()) {
-                candidates.add(PathNormalizer.join(contextPath, withoutClientPath));
+                candidates.add(PathNormalizer.join(contextPath, path));
             }
         }
         return resolve(repo.repoName(), method.fqn(), target, method.httpMethod(), candidates,
                 target.service().name() + " servisinde " + method.httpMethod() + " " + method.normalizedPath()
-                        + (withoutClientPath == null ? "" : " (ya da " + withoutClientPath + ")") + " endpoint'i yok");
+                        + (stripped.isEmpty() ? "" : " (ya da " + String.join(", ", stripped) + ")") + " endpoint'i yok");
     }
 
     private static LinkResult.Link resolve(String repo, String sourceKey, RepoFacts target, HttpMethod method,
@@ -219,6 +231,15 @@ public class Linker {
             return null;
         }
         return path.substring(prefix.length());
+    }
+
+    /** İlk segment hedefin adlarından biriyse ({@code /leasing-contract/test}) onsuz hali; değilse null. */
+    private static String withoutTargetName(String path, RepoFacts target, Map<String, RepoFacts> services) {
+        int end = path.indexOf('/', 1);
+        if (end < 0) {
+            return null;
+        }
+        return services.get(lower(path.substring(1, end))) == target ? path.substring(end) : null;
     }
 
     private static String lower(String s) {

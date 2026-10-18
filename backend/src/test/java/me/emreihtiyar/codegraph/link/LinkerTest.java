@@ -136,6 +136,24 @@ class LinkerTest {
         assertThat(r.feignMethods().get(1).reason()).contains("/leasing-contract/missing (ya da /missing)");
     }
 
+    /** Ön ek client'ın path'inde değil metodun mapping'inde: ilk segment hedefin adı ya da alias'ıysa atılır. */
+    @Test
+    void targetNamePrefixInMethodMapping() {
+        var bff = RepoFacts.empty("contract-bff", Layer.BFF, new ServiceFact("contract-bff", Layer.BFF, "", null));
+        String name = "LEASING.NGLA.leasing-contract";
+        var api = RepoFacts.empty("contract-repo", Layer.API, new ServiceFact(name, Layer.API, "", null));
+        api.endpoints().add(new EndpointFact(HttpMethod.GET, "/test", "/test", "x"));
+        bff.feignClients().add(new FeignClientFact("c.OrderClient", "contract-api", "contract-api", "", null));
+        bff.feignMethods().add(feign("c.OrderClient#byLastSegment()", HttpMethod.GET, "/leasing-contract/test"));
+        bff.feignMethods().add(feign("c.OrderClient#byAlias()", HttpMethod.GET, "/contract-api/test"));
+        bff.feignMethods().add(feign("c.OrderClient#otherPrefix()", HttpMethod.GET, "/other/test"));
+
+        LinkResult r = new Linker().link(List.of(bff, api), Map.of("contract-repo", List.of("contract-api")));
+
+        assertThat(r.feignMethods()).extracting(LinkerTest::target).containsExactly(
+                name + " GET /test", name + " GET /test", null);
+    }
+
     @Test
     void bffWithNamespacedServiceNameMatchesByLastSegmentAndRepoName() {
         // spring.application.name 'LEASING.NGLA.leasing-contract-bff', URL'de yalnızca 'leasing-contract-bff'

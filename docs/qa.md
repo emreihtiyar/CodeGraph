@@ -219,9 +219,14 @@ FR-21 kod panelinin "ilgili satır vurgulu" açılmasını istiyor. Bir kenar (�
   - **Feign → servis:** `@FeignClient(name/value)` büyük-küçük harf duyarsız olarak sırasıyla servis adı
     (`serviceName` ya da `spring.application.name`), repo adı (`name`), noktalı servis adının son parçası ve
     `aliases` ile eşleşiyor. Aynı ad iki repoya uyuyorsa sırada önce gelen kazanıyor.
-    Path eşleşmezse hedefin context-path'i eklenerek, o da olmazsa `@FeignClient(path)` ön eki atılarak tekrar
-    deneniyor. Ön ek hedefte görünmüyorsa (context-path config server'da ya da ortam değişkeninde, ya da gateway
-    yönlendirmesi) ikinci yol eşleştiriyor.
+    Path eşleşmezse sırasıyla şunlar deneniyor:
+    - hedefin context-path'i eklenmiş hali;
+    - `@FeignClient(path)` ön eki atılmış hali;
+    - ilk segment hedefin adlarından biriyse (servis adı, son parçası, repo adı, alias) o segment atılmış hali,
+      ör. `@GetMapping("/leasing-contract/test")` → `/test`.
+
+    Ön ek hedefte görünmüyorsa (context-path config server'da ya da ortam değişkeninde, ya da gateway
+    yönlendirmesi) son iki yol eşleştiriyor.
   - **HTTP metodu:** aynı olmalı; `ANY` her metotla eşleşiyor.
   - **Birden çok aday:** Spring'e benzer şekilde segmentleri birebir tutan (`/a/me` ↔ `/a/me`, `/a/{*}` ↔ `/a/{*}`)
     ve metodu açıkça aynı olan endpoint tercih ediliyor. Yine birden fazla kalırsa `AMBIGUOUS` ve her adaya kenar.
