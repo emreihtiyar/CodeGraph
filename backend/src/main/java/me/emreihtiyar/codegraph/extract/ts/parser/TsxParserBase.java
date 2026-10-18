@@ -1,5 +1,6 @@
 package me.emreihtiyar.codegraph.extract.ts.parser;
 
+import java.util.Set;
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.Parser;
 import org.antlr.v4.runtime.Token;
@@ -29,7 +30,7 @@ public abstract class TsxParserBase extends Parser {
     }
 
     protected boolean notLineTerminator() {
-        return !here(TsxParser.LineTerminator);
+        return !lineTerminatorAhead();
     }
 
     protected boolean notOpenBraceAndNotFunctionAndNotInterface() {
@@ -83,37 +84,55 @@ public abstract class TsxParserBase extends Parser {
         return false;
     }
 
+    private static final Set<String> MODIFIERS = Set.of("public", "private", "protected", "static", "readonly",
+            "declare", "abstract", "override", "accessor", "async");
+
+    /**
+     * Sınıf üyesinde sıradaki sözcük bir değiştirici mi? TypeScript derleyicisinin kuralı: değiştirici sözcüğünü
+     * aynı satırda bir üye adı (ya da {@code *}, {@code [}, {@code #}) izlemelidir; {@code static()},
+     * {@code readonly: boolean}, {@code async = false} gibi durumlarda sözcük üyenin adıdır.
+     */
+    protected boolean modifierAhead() {
+        Token word = _input.LT(1);
+        if (!MODIFIERS.contains(word.getText())) {
+            return false;
+        }
+        Token next = _input.LT(2);
+        for (int i = word.getTokenIndex() + 1; i < next.getTokenIndex(); i++) {
+            String text = _input.get(i).getText();
+            if (text.indexOf('\n') >= 0 || text.indexOf('\r') >= 0) {
+                return false;
+            }
+        }
+        return switch (next.getType()) {
+            case TsxParser.OpenParen, TsxParser.Colon, TsxParser.Assign, TsxParser.SemiColon, TsxParser.QuestionMark,
+                    TsxParser.Not, TsxParser.CloseBrace, TsxParser.OpenBrace, TsxParser.Comma, TsxParser.LessThan,
+                    Token.EOF -> false;
+            default -> true;
+        };
+    }
+
     protected boolean closeBrace() {
         return _input.LT(1).getType() == TsxParser.CloseBrace;
     }
 
-    private boolean here(int type) {
-        int index = getCurrentToken().getTokenIndex() - 1;
-        if (index < 0) {
-            return false;
-        }
-        Token ahead = _input.get(index);
-        return ahead.getChannel() == Lexer.HIDDEN && ahead.getType() == type;
-    }
-
+    /**
+     * Önceki görünür token ile sıradaki token arasında satır sonu var mı? Aradaki tüm gizli token'lara (boşluk,
+     * yorum) bakılır; grammars-v4'teki gibi yalnızca bir öncekine bakmak {@code return} ile girintili sonraki satır
+     * arasındaki satır sonunu kaçırır.
+     */
     protected boolean lineTerminatorAhead() {
-        int index = getCurrentToken().getTokenIndex() - 1;
-        if (index < 0) {
-            return false;
+        for (int index = getCurrentToken().getTokenIndex() - 1; index >= 0; index--) {
+            Token token = _input.get(index);
+            if (token.getChannel() != Lexer.HIDDEN) {
+                return false;
+            }
+            String text = token.getText();
+            if (text.indexOf('\n') >= 0 || text.indexOf('\r') >= 0 || text.indexOf('\u2028') >= 0
+                    || text.indexOf('\u2029') >= 0) {
+                return true;
+            }
         }
-        Token ahead = _input.get(index);
-        if (ahead.getChannel() != Lexer.HIDDEN) {
-            return false;
-        }
-        if (ahead.getType() == TsxParser.LineTerminator) {
-            return true;
-        }
-        if (ahead.getType() == TsxParser.WhiteSpaces && index > 0) {
-            ahead = _input.get(index - 1);
-        }
-        String text = ahead.getText();
-        int type = ahead.getType();
-        return type == TsxParser.MultiLineComment && (text.contains("\r") || text.contains("\n"))
-                || type == TsxParser.LineTerminator;
+        return false;
     }
 }

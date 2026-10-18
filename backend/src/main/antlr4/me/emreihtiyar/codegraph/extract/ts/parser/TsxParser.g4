@@ -65,8 +65,7 @@ typeParameterList
     ;
 
 typeParameter
-    : identifier constraint?
-    | identifier Assign typeArgument
+    : Const? identifier constraint? (Assign typeArgument)? // CodeGraph: <T extends A = B>, <const T>
     | typeParameters
     ;
 
@@ -405,11 +404,21 @@ statement
     | typeAliasDeclaration //ADDED
     | enumDeclaration      //ADDED
     | Export {!this.n("default")}? statement // CodeGraph: `export default` exportStatement'a kalır
+    | Declare ambientDeclaration // CodeGraph
     | expressionStatement
     ;
 
 block
     : OpenBrace statementList? CloseBrace
+    ;
+
+// CodeGraph: `declare function/class/enum/type`, `declare module "x" {}`, `declare global {}`
+ambientDeclaration
+    : functionDeclaration
+    | classDeclaration
+    | enumDeclaration
+    | typeAliasDeclaration
+    | (Module | Namespace)? (namespaceName | StringLiteral) OpenBrace statementList? CloseBrace
     ;
 
 statementList
@@ -458,15 +467,17 @@ importNamespace
     ;
 
 importFrom
-    : From StringLiteral
+    : From StringLiteral ((With | {this.n("assert")}? identifier) objectLiteral)? // CodeGraph: import öznitelikleri
     ;
 
 aliasName
     : identifierName (As identifierName)?
     ;
 
+// CodeGraph: bildirimden sonra eos aranmaz; `export const a = 1;(x)` gibi kendi `;`'ünü tüketen bildirimde eos
+// sonraki tokene düşüp hata veriyordu
 exportStatement
-    : Export Default? (exportFromBlock | declaration) eos # ExportDeclaration
+    : Export Default? (exportFromBlock eos | declaration) # ExportDeclaration
     | Export Default singleExpression eos                 # ExportDefaultDeclaration
     ;
 
@@ -599,8 +610,9 @@ debuggerStatement
     : Debugger eos
     ;
 
+// CodeGraph: gövdesiz aşırı yükleme imzası noktalı virgülsüz de olabilir (eos)
 functionDeclaration
-    : Async? Function_ '*'? identifier callSignature ((OpenBrace functionBody CloseBrace) | SemiColon)
+    : Async? Function_ '*'? identifier callSignature ((OpenBrace functionBody CloseBrace) | eos)
     ;
 
 //Ovveride ECMA
@@ -632,23 +644,40 @@ classElement
     | statement
     ;
 
+// CodeGraph: noktalı virgülsüz üyeler (eos), gövdesiz aşırı yükleme imzaları, `x!: T`. Erişimci, metot ve alan
+// aynı alternatifte: ANTLR ilk tokenden sonraki yüklemleri (eos, get/set) tahminde görmediğinden ayrı alternatifler
+// `private static foo()`'yu "static adlı alan + foo()", `static override x()`'i erişimci sanıyordu; karar artık
+// değiştiriciler okunduktan sonra veriliyor.
 propertyMemberDeclaration
-    : propertyMemberBase propertyName '?'? typeAnnotation? initializer? SemiColon        # PropertyDeclarationExpression
-    | propertyMemberBase propertyName callSignature ((OpenBrace functionBody CloseBrace) | SemiColon) # MethodDeclarationExpression
-    | propertyMemberBase (getAccessor | setAccessor)                                     # GetterSetterDeclarationExpression
-    | abstractDeclaration                                                                # AbstractMemberDeclaration
+    : propertyMemberBase (getAccessor | setAccessor | propertyName (methodTail | fieldTail)) # MemberDeclarationExpression
+    | abstractDeclaration                                                                    # AbstractMemberDeclaration
     ;
 
+methodTail
+    : '?'? callSignature ((OpenBrace functionBody CloseBrace) | eos)
+    ;
+
+fieldTail
+    : ('?' | '!')? typeAnnotation? initializer? eos
+    ;
+
+// CodeGraph: değiştiriciler her sırada (`static async`, `public override`, `protected abstract readonly` …).
+// Bir sözcüğün değiştirici mi üye adı mı olduğuna (`static foo()` / `static: boolean`) sonraki token karar verir;
+// yüklemler kuralın başında olduğu için ANTLR'ın tahmininde de kullanılır.
 propertyMemberBase
-    : accessibilityModifier? Async? Static? ReadOnly?
+    : memberModifier* '*'? {!this.modifierAhead()}?
+    ;
+
+memberModifier
+    : {this.modifierAhead()}? (accessibilityModifier | Static | ReadOnly | Declare | Abstract | Async | identifier)
     ;
 
 indexMemberDeclaration
-    : indexSignature SemiColon
+    : indexSignature eos
     ;
 
 generatorMethod
-    : (Async {this.notLineTerminator()}?)? '*'? propertyName '(' formalParameterList? ')' OpenBrace functionBody CloseBrace
+    : (Async {this.notLineTerminator()}?)? '*'? propertyName typeParameters? '(' formalParameterList? ')' typeAnnotation? OpenBrace functionBody CloseBrace
     ;
 
 generatorFunctionDeclaration
@@ -688,7 +717,7 @@ formalParameterList
     ;
 
 formalParameterArg
-    : decorator? accessibilityModifier? assignable '?'? typeAnnotation? (
+    : decorator* accessibilityModifier? ReadOnly? assignable '?'? typeAnnotation? (
         Assign singleExpression
     )? // ECMAScript 6: Initialization
     ;
@@ -747,6 +776,7 @@ propertyName
     | StringLiteral
     | numericLiteral
     | '[' singleExpression ']'
+    | privateIdentifier // CodeGraph: sınıfta #alan
     ;
 
 arguments
@@ -833,7 +863,7 @@ assignable
 
 anonymousFunction
     : functionDeclaration
-    | Async? Function_ '*'? '(' formalParameterList? ')' typeAnnotation? OpenBrace functionBody CloseBrace
+    | Async? Function_ '*'? typeParameters? '(' formalParameterList? ')' typeAnnotation? OpenBrace functionBody CloseBrace
     | arrowFunctionDeclaration
     ;
 
@@ -873,6 +903,8 @@ assignmentOperator
     | '|='
     | '**='
     | '??='
+    | '||='
+    | '&&='
     ;
 
 literal

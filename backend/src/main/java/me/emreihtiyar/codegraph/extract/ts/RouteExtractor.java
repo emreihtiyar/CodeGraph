@@ -172,20 +172,29 @@ final class RouteExtractor {
     }
 
     private void objectRoute(Obj route, JsModule module, String parentPath, int depth) {
-        Scope scope = new Scope(module);
-        String path = prop(route, "path").flatMap(p -> evaluator.evalString(p, scope)).orElse(null);
+        String path = prop(route, "path").map(p -> path(p, module, route.line())).orElse(null);
         boolean index = prop(route, "index").filter(RouteExtractor::isTrue).isPresent();
         String fullPath = path == null ? parentPath : join(parentPath, path);
 
         Optional<Node> value = COMPONENT_KEYS.stream().flatMap(k -> prop(route, k).stream()).findFirst();
-        if (path != null || index) {
-            if (value.isPresent()) {
-                screen(fullPath, value.get(), module, route.line());
-            } else if (prop(route, "path").isPresent() && path == null) {
-                log.debug("{}:{} route path'i statik olarak bilinemiyor", module.path(), route.line());
-            }
+        if ((path != null || index) && value.isPresent()) {
+            screen(fullPath, value.get(), module, route.line());
         }
         prop(route, "children").ifPresent(c -> routes(c, module, fullPath, depth + 1));
+    }
+
+    /**
+     * Route path'inin değeri. Statik olarak bilinemiyorsa ({@code path: getPath(x)}) ekran kaybolmasın diye ifadenin
+     * adı süslü parantezle yazılır: {@code {RoutePaths.SELLER}}.
+     */
+    private String path(Node node, JsModule module, int line) {
+        Optional<String> value = evaluator.evalString(node, new Scope(module));
+        if (value.isPresent()) {
+            return value.get();
+        }
+        String name = Js.dottedName(node);
+        log.debug("{}:{} route path'i statik olarak bilinemiyor ({})", module.path(), line, name);
+        return "{" + (name != null ? name : "?") + "}";
     }
 
     private static Optional<Node> prop(Obj obj, String key) {
@@ -209,7 +218,6 @@ final class RouteExtractor {
     }
 
     private void jsxRoute(Jsx route, JsModule module, String parentPath) {
-        Scope scope = new Scope(module);
         String path = null;
         boolean index = false;
         Node value = null;
@@ -218,7 +226,7 @@ final class RouteExtractor {
                 continue;
             }
             switch (attr.name()) {
-                case "path" -> path = attr.value() == null ? null : evaluator.evalString(attr.value(), scope).orElse(null);
+                case "path" -> path = attr.value() == null ? null : path(attr.value(), module, route.line());
                 case "index" -> index = attr.value() == null || isTrue(attr.value());
                 case "element", "Component", "component" -> value = attr.value() == null ? value : attr.value();
                 default -> { }

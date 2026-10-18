@@ -42,6 +42,20 @@ public final class TsSourceParser {
         return !fileName.endsWith(".ts");
     }
 
+    /**
+     * ANTLR'ın "no viable alternative at input '…'" metni kararın başından hatalı tokene kadar onlarca satır
+     * olabilir; tek satıra indirilip hatalı tokenin yakını bırakılır.
+     */
+    private static String shorten(String msg) {
+        String oneLine = msg.replace("\\r", "").replace("\\n", "\n").replace("\\t", " ") // ANTLR \n'leri kaçışlı yazar
+                .replaceAll("\\s*\\R\\s*", " ⏎ ");
+        String prefix = "no viable alternative at input '";
+        if (oneLine.startsWith(prefix) && oneLine.length() > prefix.length() + 80) {
+            return prefix + "…" + oneLine.substring(oneLine.length() - 80);
+        }
+        return oneLine.length() > 200 ? oneLine.substring(0, 200) + "…" : oneLine;
+    }
+
     private static Result parse(String source, boolean jsx, PredictionMode mode, boolean bail) {
         List<String> errors = new ArrayList<>();
         BaseErrorListener listener = new BaseErrorListener() {
@@ -49,7 +63,7 @@ public final class TsSourceParser {
             public void syntaxError(Recognizer<?, ?> recognizer, Object offendingSymbol, int line,
                     int charPositionInLine, String msg, RecognitionException e) {
                 if (errors.size() < 5) {
-                    errors.add(line + ":" + charPositionInLine + " " + msg);
+                    errors.add(line + ":" + charPositionInLine + " " + shorten(msg));
                 }
             }
         };

@@ -76,6 +76,15 @@ Gerçek UI'larda ekranlar `src/routes.ts`'teki
 - **Component:** dosyanın varsayılan export'u. `withX(Content)` gibi sarmalanmışsa içteki component alınıyor.
 - **Varsayım:** sayfa dosyaları `export default` ile dışa aktarılıyor. Ekran sayısı route listesindekinden azsa Analiz
   ekranındaki "Route '…': component bulunamadı" sorunları nedenini gösterir.
+- **Path:** string ya da sabitten (`RoutePaths.SELLER`) okunuyor. Statik bilinemiyorsa ekran yine çıkıyor; path
+  ifadenin adıyla yazılıyor (`/{config.routes.x}`).
+- Cevap:
+
+### Q8c. `CopyContractForm.tsx` sözdizimi hatası
+purchasing-ui'da `182:9`, contract-ui'da `1556:11` satırında `no viable alternative at input '('` hatası vardı.
+Hata, yerel taramada bulunan eksiklerden biri olabilir; bu durumda düzelmiş olmalı. Hata sürüyorsa Analiz ekranındaki
+sorun artık satırın kodunu da gösteriyor (`⟨…⟩`).
+- **Soru:** Güncel sürümle hata sürüyor mu? Sürüyorsa sorundaki `⟨…⟩` kısmını (ya da satırın ±3 satırını) gönder.
 - Cevap:
 
 ## Bağlama ve yükleme (M5)
@@ -161,6 +170,20 @@ FR-21 kod panelinin "ilgili satır vurgulu" açılmasını istiyor. Bir kenar (�
   12 bin satırlık bir TSX dosyası JVM'deki ilk ayrıştırmada ~18 sn sürüyor (ANTLR DFA önbelleğinin ısınması).
   Sonraki dosyalarda aynı dosya ~50 ms. Önbellek JVM boyunca paylaşılıyor; yani bu maliyet analiz başına bir kez
   ödeniyor.
+  - **Yerel React kodu taraması (2.300 TS/TSX/JS dosyası):** eksik bulunan yapılar eklendi. Bunlar:
+    - sınıfta noktalı virgülsüz alanlar, `#özel` alanlar, her sırada değiştiriciler (`static override`,
+      `private static async`), gövdesiz aşırı yükleme imzaları, `constructor(private readonly x)`;
+    - varsayılanlı tip parametreleri (`<T extends A = B>`, `<const T>`) ve generic `function <T>()`;
+    - `||=` ve `&&=`, dönüş tipli nesne metotları (`{ set(x): void {} }`), `declare function/class/global/module`;
+    - generic JSX component'leri (`<Table<Row> />`), `import x from "./a.json" with { type: "json" }`.
+    Sonuç: 70 hatalı dosya → 0.
+  - **Satır sonu yüklemi:** `return`/`break`/`throw` sonrasındaki satır sonu, araya girinti boşluğu girince
+    görülmüyordu. Noktalı virgülsüz kodda `if (x) return` ile sonraki girintili satır tek ifade sanılıyordu. Artık
+    aradaki tüm gizli token'lara bakılıyor.
+  - **Hatalı dosyalar:** ANTLR'ın hata toparlaması eksik çocuklu düğümler bırakıyor. Eskiden bu, indirgemede NPE'ye
+    yol açıyor ve dosyanın tamamı atılıyordu ("Ayrıştırılamadı: NullPointerException …"). Artık yalnızca bozuk alt
+    ağaç atlanıyor, dosyanın geri kalanındaki component ve kullanımlar korunuyor. Sözdizimi hatası sorununa hatalı
+    satırın kodu da ekleniyor (`⟨…⟩`).
 - **D12. ApiCall URL'i:** `urlTemplate`, `callApi` endpoint'inin değerlendirilmiş hali; dinamik kısımlar `{*}`
   (ör. `leasing-contract-bff/api/sub-contract-view/{*}/payment-plan`). İlk segment `targetPrefix` (BFF'in gateway
   prefix'i); kalan kısım `normalizedPath` oluyor. İlk segment statik değilse ikisi de `null` kalıyor ve

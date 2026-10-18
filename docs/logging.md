@@ -70,3 +70,8 @@ Ekranlar route dizilerinden çıkar: `path` ile birlikte `component`/`element` i
    component olarak tanınmadığını gösterir.
 3. Ekran var ama isteği yoksa ekranın component'lerinde ApiCall kullanımı bulunamamıştır; TRACE seviyesi her
    kullanımı (`component → ApiCall`) listeler.
+4. `Sözdizimi hatası` sorunları ayrıştırıcının tanımadığı bir yapıyı gösterir; sorunun sonundaki `⟨…⟩` hatalı satırın
+   kodudur. Hatalı dosyanın yalnızca bozuk kısmı atlanır, geri kalanı analiz edilir.
+
+`.ts` dosyaları JSX kapalı (`<T>x` tip dönüşümü geçerli), `.tsx`, `.jsx` ve `.js` dosyaları JSX açık ayrıştırılır;
+aynı projede hepsinin bulunması sorun değildir.

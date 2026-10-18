@@ -74,6 +74,30 @@ class RouteExtractorTest {
         });
     }
 
+    /** Path sabitten çözülür; çözülemiyorsa ekran yine çıkar, path ifadenin adıyla yazılır. */
+    @Test
+    void pathFromConstantsOrUnknown() {
+        JsModule paths = module("src/paths.ts", """
+                export const RoutePaths = { SELLER: "/seller-contribution" };
+                """);
+        JsModule routes = module("src/routes.ts", """
+                import { RoutePaths } from "./paths";
+                export default [
+                  { path: RoutePaths.SELLER, component: asyncComponent(() => import("./Seller")) },
+                  { path: config.routes.other, component: asyncComponent(() => import("./Other")) },
+                  { path: buildPath("x"), component: asyncComponent(() => import("./Third")) },
+                ];
+                """);
+        JsModule seller = module("src/Seller.tsx", "export default function Seller() { return <div/>; }");
+        JsModule other = module("src/Other.tsx", "export default function Other() { return <div/>; }");
+        JsModule third = module("src/Third.tsx", "export default function Third() { return <div/>; }");
+
+        assertThat(extract(paths, routes, seller, other, third))
+                .extracting(ScreenFact::routePath, ScreenFact::name)
+                .containsExactly(tuple("/seller-contribution", "Seller"), tuple("/{config.routes.other}", "Other"),
+                        tuple("/{?}", "Third"));
+    }
+
     @Test
     void reactRouterObjectsWithChildrenAndLazy() {
         JsModule app = module("src/App.tsx", """

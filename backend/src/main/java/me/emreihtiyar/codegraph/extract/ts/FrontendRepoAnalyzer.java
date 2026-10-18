@@ -121,7 +121,8 @@ public class FrontendRepoAnalyzer {
             TsSourceParser.Result result = TsSourceParser.parse(source, TsSourceParser.jsxEnabledFor(path));
             long ms = (System.nanoTime() - t0) / 1_000_000;
             for (String error : result.errors()) {
-                issues.add(new ParseIssue(path, lineOf(error), "Sözdizimi hatası: " + error));
+                int line = lineOf(error);
+                issues.add(new ParseIssue(path, line, "Sözdizimi hatası: " + error + sourceLine(source, line)));
             }
             if (!result.errors().isEmpty()) {
                 log.debug("{}: {} sözdizimi hatası ({} ms), ilki: {}", path, result.errors().size(), ms,
@@ -139,6 +140,19 @@ public class FrontendRepoAnalyzer {
 
     private static String read(Path file) throws IOException {
         return SourceText.read(file);
+    }
+
+    /** Hatalı satırın kendisi; hangi yapının tanınmadığını sorunlar listesinden görmek için. */
+    private static String sourceLine(String source, int line) {
+        String[] lines = source.split("\\R", line + 1);
+        if (line < 1 || line > lines.length) {
+            return "";
+        }
+        String text = lines[line - 1].strip();
+        if (text.length() > 120) {
+            text = text.substring(0, 120) + "…";
+        }
+        return text.isEmpty() ? "" : " ⟨" + text + "⟩";
     }
 
     private static int lineOf(String error) {

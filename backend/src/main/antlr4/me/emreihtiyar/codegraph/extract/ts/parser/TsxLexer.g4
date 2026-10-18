@@ -121,6 +121,8 @@ BitXorAssign               : '^=';
 BitOrAssign                : '|=';
 PowerAssign                : '**=';
 NullishCoalescingAssign    : '??=';
+OrAssign                   : '||=';
+AndAssign                  : '&&=';
 ARROW                      : '=>';
 
 /// Null Literals
@@ -273,6 +275,8 @@ TemplateStringAtom            : ~[`\\];
 // JSX açılış etiketi: <Ad ...> veya <Ad ... />
 mode JSX_OPENING_ELEMENT;
 
+// Generic component'in tip argümanları: <Table<Row> ...> (tek düzey iç içe: <Map<K, V>>)
+JsxTypeArguments                   : '<' {this.IsJsxTypeArgumentsPossible()}? (~[<>] | '<' ~[<>]* '>')* '>' -> channel(HIDDEN);
 JsxOpeningElementBegin             : '<' -> pushMode(JSX_OPENING_ELEMENT);
 JsxOpeningElementEnd               : '>' -> popMode, pushMode(JSX_CHILDREN);
 JsxOpeningElementSlashEnd          : '/>' -> popMode;

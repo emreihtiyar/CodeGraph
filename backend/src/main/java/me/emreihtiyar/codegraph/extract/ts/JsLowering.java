@@ -35,12 +35,17 @@ import me.emreihtiyar.codegraph.extract.ts.parser.TsxParser;
 import me.emreihtiyar.codegraph.extract.ts.parser.TsxParser.*;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
+import org.antlr.v4.runtime.tree.ErrorNode;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 
 /**
  * {@link TsxParser} ağacını {@link Js} sözdizimi ağacına indirger. Tip bildirimleri (arayüz, tip takma adı, tip
  * notasyonları) atılır; tanınmayan yapılar {@link Other} olarak çocuklarıyla korunur.
+ *
+ * <p>Sözdizimi hatalı dosyalarda ANTLR'ın hata toparlaması eksik çocuklu düğümler bırakır. Böyle bir alt ağaç
+ * indirgenemezse yalnızca o alt ağaç {@link Other} olarak çocuklarından kurtarılır; dosyanın geri kalanı korunur.
+ * Hatasız ağaçtaki bir indirgeme hatası ise hata olarak yukarı iletilir.
  */
 final class JsLowering {
 
@@ -73,6 +78,14 @@ final class JsLowering {
         if (ctx == null) {
             return List.of();
         }
+        try {
+            return lowerStatement(ctx);
+        } catch (RuntimeException e) {
+            return List.of(recover(ctx, e));
+        }
+    }
+
+    private static List<Node> lowerStatement(StatementContext ctx) {
         if (ctx.statement() != null) { // Export statement
             return exported(statement(ctx.statement()), false, ctx);
         }
@@ -92,7 +105,7 @@ final class JsLowering {
             return c.Export() != null ? List.of(new Export(List.of(node), c.Default() != null, line(c))) : List.of(node);
         }
         if (ctx.functionDeclaration() != null) {
-            return List.of(functionDeclaration(ctx.functionDeclaration()));
+            return signatureOnly(ctx.functionDeclaration()) ? List.of() : List.of(functionDeclaration(ctx.functionDeclaration()));
         }
         if (ctx.returnStatement() != null) {
             ReturnStatementContext r = ctx.returnStatement();
@@ -199,6 +212,8 @@ final class JsLowering {
                 ClassDeclarationContext c = decl.classDeclaration();
                 nodes = List.of(classNode(c.identifier() == null ? null : c.identifier().getText(), c.classHeritage(),
                         c.classTail(), c));
+            } else if (signatureOnly(decl.functionDeclaration())) {
+                return List.of();
             } else {
                 nodes = List.of(functionDeclaration(decl.functionDeclaration()));
             }
@@ -233,6 +248,11 @@ final class JsLowering {
     }
 
     // ---- fonksiyonlar ve sınıflar ----
+
+    /** Gövdesiz aşırı yükleme imzası ya da {@code declare function}: asıl tanımı gölgelememesi için atılır. */
+    private static boolean signatureOnly(FunctionDeclarationContext ctx) {
+        return ctx.OpenBrace() == null;
+    }
 
     private static Func functionDeclaration(FunctionDeclarationContext ctx) {
         CallSignatureContext sig = ctx.callSignature();
@@ -361,20 +381,26 @@ final class JsLowering {
                 ConstructorDeclarationContext c = element.constructorDeclaration();
                 members.add(new Func("constructor", formalParameterList(c.formalParameterList()),
                         functionBody(c.functionBody()), false, line(c), endLine(c)));
-            } else if (element.propertyMemberDeclaration() instanceof MethodDeclarationExpressionContext m) {
-                members.add(new Func(propertyName(m.propertyName()), parameterList(m.callSignature().parameterList()),
-                        functionBody(m.functionBody()), m.propertyMemberBase().Async() != null, line(m), endLine(m)));
-            } else if (element.propertyMemberDeclaration() instanceof PropertyDeclarationExpressionContext p) {
-                if (p.initializer() != null) {
-                    String key = propertyName(p.propertyName());
-                    members.add(new VarDecl(new Pattern(key, List.of(key)), expr(p.initializer().singleExpression()),
-                            line(p), endLine(p)));
+            } else if (element.propertyMemberDeclaration() instanceof MemberDeclarationExpressionContext m
+                    && m.propertyName() != null) {
+                String key = propertyName(m.propertyName());
+                if (m.methodTail() != null && m.methodTail().OpenBrace() != null) { // gövdesiz imzalar atılır
+                    members.add(new Func(key, parameterList(m.methodTail().callSignature().parameterList()),
+                            functionBody(m.methodTail().functionBody()), isAsync(m.propertyMemberBase()), line(m),
+                            endLine(m)));
+                } else if (m.fieldTail() != null && m.fieldTail().initializer() != null) {
+                    members.add(new VarDecl(new Pattern(key, List.of(key)),
+                            expr(m.fieldTail().initializer().singleExpression()), line(m), endLine(m)));
                 }
             } else if (element.propertyMemberDeclaration() != null || element.statement() != null) {
                 members.add(generic(element));
             }
         }
         return new ClassNode(name, superClass, members, line(ctx), endLine(ctx));
+    }
+
+    private static boolean isAsync(PropertyMemberBaseContext base) {
+        return base.memberModifier().stream().anyMatch(m -> m.Async() != null);
     }
 
     private static Node typeNameExpr(String dotted, int line) {
@@ -397,6 +423,14 @@ final class JsLowering {
     }
 
     static Node expr(SingleExpressionContext ctx) {
+        try {
+            return lowerExpr(ctx);
+        } catch (RuntimeException e) {
+            return recover(ctx, e);
+        }
+    }
+
+    private static Node lowerExpr(SingleExpressionContext ctx) {
         int line = line(ctx);
         if (ctx instanceof IdentifierExpressionContext c) {
             return new Ident(c.identifierName().getText(), line);
@@ -597,6 +631,9 @@ final class JsLowering {
         if (ctx.StringLiteral() != null) {
             return unquote(ctx.StringLiteral().getText());
         }
+        if (ctx.privateIdentifier() != null) { // #alan; erişimi this.alan olarak indirgenir
+            return ctx.privateIdentifier().identifierName().getText();
+        }
         if (ctx.singleExpression() != null) {
             return null;
         }
@@ -618,7 +655,15 @@ final class JsLowering {
 
     // ---- JSX ----
 
-    private static Jsx jsx(JsxElementContext ctx) {
+    private static Node jsx(JsxElementContext ctx) {
+        try {
+            return lowerJsx(ctx);
+        } catch (RuntimeException e) {
+            return recover(ctx, e);
+        }
+    }
+
+    private static Jsx lowerJsx(JsxElementContext ctx) {
         if (ctx.jsxSelfClosingElement() != null) {
             JsxSelfClosingElementContext e = ctx.jsxSelfClosingElement();
             return new Jsx(text(e.JsxOpeningElementId()), attributes(e.jsxAttribute()), List.of(), line(ctx));
@@ -692,32 +737,67 @@ final class JsLowering {
             if (!(child instanceof ParserRuleContext rule) || isTypeContext(child)) {
                 continue;
             }
-            if (rule instanceof SingleExpressionContext e) {
-                out.add(expr(e));
-            } else if (rule instanceof StatementContext s) {
-                out.addAll(statement(s));
-            } else if (rule instanceof ExpressionSequenceContext s) {
-                out.add(sequence(s));
-            } else if (rule instanceof FunctionBodyContext b) {
-                out.addAll(functionBody(b));
-            } else if (rule instanceof AnonymousFunctionContext f) {
-                out.add(anonymousFunction(f));
-            } else if (rule instanceof ArrowFunctionDeclarationContext f) {
-                out.add(arrow(f));
-            } else if (rule instanceof FunctionDeclarationContext f) {
-                out.add(functionDeclaration(f));
-            } else if (rule instanceof VariableStatementContext v) {
-                out.addAll(variableStatement(v));
-            } else if (rule instanceof ObjectLiteralContext o) {
-                out.add(objectLiteral(o));
-            } else if (rule instanceof ArrayLiteralContext a) {
-                out.add(arrayLiteral(a));
-            } else if (rule instanceof JsxElementContext j) {
-                out.add(jsx(j));
-            } else {
+            try {
+                collectChild(rule, out);
+            } catch (RuntimeException e) {
+                if (!recovered(rule)) {
+                    throw e;
+                }
                 collect(rule, out);
             }
         }
+    }
+
+    private static void collectChild(ParserRuleContext rule, List<Node> out) {
+        if (rule instanceof SingleExpressionContext e) {
+            out.add(expr(e));
+        } else if (rule instanceof StatementContext s) {
+            out.addAll(statement(s));
+        } else if (rule instanceof ExpressionSequenceContext s) {
+            out.add(sequence(s));
+        } else if (rule instanceof FunctionBodyContext b) {
+            out.addAll(functionBody(b));
+        } else if (rule instanceof AnonymousFunctionContext f) {
+            out.add(anonymousFunction(f));
+        } else if (rule instanceof ArrowFunctionDeclarationContext f) {
+            out.add(arrow(f));
+        } else if (rule instanceof FunctionDeclarationContext f) {
+            out.add(functionDeclaration(f));
+        } else if (rule instanceof VariableStatementContext v) {
+            out.addAll(variableStatement(v));
+        } else if (rule instanceof ObjectLiteralContext o) {
+            out.add(objectLiteral(o));
+        } else if (rule instanceof ArrayLiteralContext a) {
+            out.add(arrayLiteral(a));
+        } else if (rule instanceof JsxElementContext j) {
+            out.add(jsx(j));
+        } else {
+            collect(rule, out);
+        }
+    }
+
+    /** Hata toparlamasıyla eksik kalmış alt ağaç: indirgenebilen çocukları korunur. */
+    private static Node recover(ParserRuleContext ctx, RuntimeException e) {
+        if (!recovered(ctx)) {
+            throw e;
+        }
+        return generic(ctx);
+    }
+
+    /** Alt ağaçta ANTLR'ın hata toparlamasının izi (yakalanan istisna ya da hata düğümü) var mı? */
+    private static boolean recovered(ParserRuleContext ctx) {
+        if (ctx.exception != null) {
+            return true;
+        }
+        if (ctx.children != null) {
+            for (ParseTree child : ctx.children) {
+                if (child instanceof ErrorNode
+                        || child instanceof ParserRuleContext rule && recovered(rule)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static String text(TerminalNode node) {

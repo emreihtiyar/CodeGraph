@@ -21,6 +21,7 @@ public abstract class TsxLexerBase extends Lexer {
     private final Deque<Boolean> scopeStrictModes = new ArrayDeque<>();
     private final Deque<Integer> braceKinds = new ArrayDeque<>();
     private Token lastToken;
+    private Token tokenBeforeLast;
     private boolean useStrictDefault;
     private boolean useStrictCurrent;
     private int templateDepth;
@@ -52,6 +53,7 @@ public abstract class TsxLexerBase extends Lexer {
     public Token nextToken() {
         Token next = super.nextToken();
         if (next.getChannel() == Token.DEFAULT_CHANNEL) {
+            tokenBeforeLast = lastToken;
             lastToken = next;
         }
         return next;
@@ -135,6 +137,16 @@ public abstract class TsxLexerBase extends Lexer {
             default -> false;
         };
         return afterExpressionStart && !looksLikeTypeParameters();
+    }
+
+    /** JSX açılış etiketinde ada hemen bitişik {@code '<'}: generic component'in tip argümanları. */
+    protected boolean IsJsxTypeArgumentsPossible() {
+        return lastToken != null && lastToken.getType() == TsxLexer.JsxOpeningElementId && tokenBeforeLast != null
+                && switch (tokenBeforeLast.getType()) {
+                    case TsxLexer.JsxElementBegin, TsxLexer.JsxOpeningElementBegin,
+                            TsxLexer.JsxChildrenOpeningElementBegin -> true;
+                    default -> false;
+                };
     }
 
     private boolean looksLikeTypeParameters() {
