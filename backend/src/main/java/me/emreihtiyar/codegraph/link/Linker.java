@@ -26,7 +26,9 @@ import org.springframework.stereotype.Component;
  *   <li><b>FeignClient → Service:</b> çözülmüş {@code name/value}; servis adı, repo adı veya {@code aliases} ile
  *       büyük-küçük harf duyarsız eşleşir.</li>
  *   <li><b>FeignMethod → Endpoint:</b> Feign path'i hedefin endpoint path'iyle (context-path dahil) eşleştirilir;
- *       eşleşme yoksa context-path eklenmiş hali denenir.</li>
+ *       eşleşme yoksa context-path eklenmiş hali, o da yoksa {@code @FeignClient(path)} ön eki atılmış hali denenir
+ *       (ön ek analiz edilmeyen bir yerde tanımlı context-path'e ya da gateway yönlendirmesine karşılık
+ *       gelebilir).</li>
  * </ul>
  * HTTP metodu aynı olmalıdır ({@code ANY} her metotla eşleşir). Birden çok endpoint eşleşirse en özgül olan(lar)
  * seçilir (bkz. {@link #mostSpecific}); yine de birden fazla kalırsa sonuç {@link Resolution#AMBIGUOUS} olur.
@@ -142,12 +144,20 @@ public class Linker {
                             + " (analizdeyse repos dosyasında aliases'ına ekleyin)");
         }
         String contextPath = target.service().contextPath();
-        List<String> candidates = contextPath.isEmpty()
-                ? List.of(method.normalizedPath())
-                : List.of(method.normalizedPath(), PathNormalizer.join(contextPath, method.normalizedPath()));
+        List<String> candidates = new ArrayList<>(List.of(method.normalizedPath()));
+        if (!contextPath.isEmpty()) {
+            candidates.add(PathNormalizer.join(contextPath, method.normalizedPath()));
+        }
+        String withoutClientPath = withoutPrefix(method.normalizedPath(), PathNormalizer.normalize(client.path()));
+        if (withoutClientPath != null) {
+            candidates.add(withoutClientPath);
+            if (!contextPath.isEmpty()) {
+                candidates.add(PathNormalizer.join(contextPath, withoutClientPath));
+            }
+        }
         return resolve(repo.repoName(), method.fqn(), target, method.httpMethod(), candidates,
                 target.service().name() + " servisinde " + method.httpMethod() + " " + method.normalizedPath()
-                        + " endpoint'i yok");
+                        + (withoutClientPath == null ? "" : " (ya da " + withoutClientPath + ")") + " endpoint'i yok");
     }
 
     private static LinkResult.Link resolve(String repo, String sourceKey, RepoFacts target, HttpMethod method,
@@ -201,6 +211,14 @@ public class Linker {
             }
         }
         return score;
+    }
+
+    /** {@code /a/b/c} − {@code /a} → {@code /b/c}; ön ek yoksa ya da path'in tamamıysa null. */
+    private static String withoutPrefix(String path, String prefix) {
+        if (prefix.equals("/") || !path.startsWith(prefix + "/")) {
+            return null;
+        }
+        return path.substring(prefix.length());
     }
 
     private static String lower(String s) {

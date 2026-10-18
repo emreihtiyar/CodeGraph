@@ -115,6 +115,27 @@ class LinkerTest {
                         tuple("OrderClient#anyItem", 2, Resolution.AMBIGUOUS));
     }
 
+    /** {@code @FeignClient(path)} ön eki hedefte görünmüyorsa (dışarıda tanımlı context-path, gateway) atılarak denenir. */
+    @Test
+    void feignClientPathPrefixMissingOnTarget() {
+        var bff = RepoFacts.empty("contract-bff", Layer.BFF, new ServiceFact("contract-bff", Layer.BFF, "", null));
+        var api = RepoFacts.empty("leasing-contract", Layer.API, new ServiceFact("leasing-contract", Layer.API, "", null));
+        api.endpoints().add(new EndpointFact(HttpMethod.GET, "/sub-contract-view/{id}/terminations",
+                "/sub-contract-view/{*}/terminations", "x"));
+        bff.feignClients().add(new FeignClientFact("c.OrderClient", "leasing-contract", "leasing-contract",
+                "/leasing-contract", null));
+        bff.feignMethods().add(feign("c.OrderClient#terminations(long)", HttpMethod.GET,
+                "/leasing-contract/sub-contract-view/{*}/terminations"));
+        bff.feignMethods().add(feign("c.OrderClient#missing()", HttpMethod.GET, "/leasing-contract/missing"));
+
+        LinkResult r = new Linker().link(List.of(bff, api), Map.of());
+
+        assertThat(r.feignMethods()).extracting(LinkerTest::target, LinkResult.Link::resolution).containsExactly(
+                tuple("leasing-contract GET /sub-contract-view/{*}/terminations", Resolution.RESOLVED),
+                tuple(null, Resolution.UNRESOLVED));
+        assertThat(r.feignMethods().get(1).reason()).contains("/leasing-contract/missing (ya da /missing)");
+    }
+
     @Test
     void bffWithNamespacedServiceNameMatchesByLastSegmentAndRepoName() {
         // spring.application.name 'LEASING.NGLA.leasing-contract-bff', URL'de yalnızca 'leasing-contract-bff'
