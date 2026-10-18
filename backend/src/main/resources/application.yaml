@@ -20,7 +20,8 @@ codegraph:
   #     path: ../repos/credit-api
   #     layer: API
   #     service-name: credit-api           # opsiyonel; varsayılan spring.application.name
-  #     aliases: [credit]                  # opsiyonel; Feign adı eşlemeleri
+  #     feign-name: CREDIT-API             # opsiyonel; @FeignClient(name) değeri; yoksa servis/repo adı
+  #     aliases: [credit]                  # opsiyonel; ek Feign adları
   # Çözülemeyen ${...} değerleri (ör. config server'dan gelen Feign adları); noktalı anahtarlar [ ] içinde.
   # Dosyadaki placeholders ile birleşir, çakışmada buradaki geçerlidir.
   # placeholders:

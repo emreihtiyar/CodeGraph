@@ -57,7 +57,15 @@ ApiCall, ApiCalls dosyasının export ettiği ve `callApi({ endpoint, method })`
 3. `callApi çağrısında 'endpoint' bulunamadı` sorunu, `callApi`'ye nesne literali yerine çözülemeyen bir değişken
    verildiğini gösterir.
 4. ApiCall'lar bulunuyor ama bağlanmıyorsa `me.emreihtiyar.codegraph.link` DEBUG'ı hedef prefix'i ve BFF
-   tablosunu yan yana gösterir; uyuşmuyorsa repos dosyasında BFF'e `gateway-prefix` verin.
+   tablosunu yan yana gösterir; uyuşmuyorsa repos dosyasında BFF'e `gatewayPrefix` verin (`application.yml`'de
+   `gateway-prefix`).
+
+## Feign çağrıları servise bağlanmıyorsa
+
+`Hedef servis analizde yok: X` sorunu, `@FeignClient`'taki `X` adının hiçbir repoya eşlenmediğini gösterir.
+`me.emreihtiyar.codegraph.link` DEBUG'ı `Feign hedef adları: [...]` satırında hangi adın hangi repoya gittiğini yazar.
+Hedef repo analizdeyse repos dosyasında ona `feignName: X` verin (`application.yml`'de `feign-name`). Verilen
+`feignName` servis adından ve repo adından önce denenir.
 
 ## UI'da ekran yoksa ya da eksikse
 

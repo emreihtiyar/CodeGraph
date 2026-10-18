@@ -216,7 +216,13 @@ FR-21 kod panelinin "ilgili satır vurgulu" açılmasını istiyor. Bir kenar (�
 - **D14. Linker eşleştirme kuralları:**
   - **ApiCall → BFF:** `targetPrefix`, BFF'in gateway prefix'iyle eşleşir (büyük-küçük harf duyarsız; prefix
     verilmezse servis adı). Kalan path eşleşmezse prefix'li hali de deneniyor (gateway prefix'i kesmiyorsa diye).
-  - **Feign → servis:** sırasıyla servis adı (`spring.application.name`), repo adı ve `aliases` ile eşleşiyor.
+  - **Feign → servis:** `@FeignClient(name/value)` büyük-küçük harf duyarsız olarak sırasıyla şunlarla eşleşiyor:
+    - repos dosyasındaki `feignName` (verilmişse; başka bir reponun adıyla çakışsa da kazanır);
+    - servis adı (`serviceName` ya da `spring.application.name`);
+    - repo adı (`name`);
+    - noktalı servis adının son parçası;
+    - `aliases`.
+
     Path eşleşmezse hedefin context-path'i eklenerek tekrar deneniyor.
   - **HTTP metodu:** aynı olmalı; `ANY` her metotla eşleşiyor.
   - **Birden çok aday:** Spring'e benzer şekilde segmentleri birebir tutan (`/a/me` ↔ `/a/me`, `/a/{*}` ↔ `/a/{*}`)

@@ -13,10 +13,13 @@ import java.util.Objects;
  * @param serviceName   opsiyonel; verilmezse {@code spring.application.name} (frontend için repo adı) kullanılır
  * @param gatewayPrefix opsiyonel; yalnızca BFF'ler için anlamlı. Gateway sonrası ilk path segmenti
  *                      (baştaki/sondaki '/' olmadan). Verilmezse servis adıyla aynı kabul edilir.
+ * @param feignName     opsiyonel; diğer servislerin {@code @FeignClient(name/value)} ile bu servisi çağırdığı ad.
+ *                      Verilirse Feign hedefi önce bununla eşlenir ve başka bir reponun adıyla çakışsa da kazanır;
+ *                      verilmezse servis adı ve repo adı kullanılır
  * @param aliases       Feign {@code name/value} değerlerinin bu servise eşlenmesi için ek isimler
  */
-public record RepoDefinition(
-        String name, Path path, Layer layer, String serviceName, String gatewayPrefix, List<String> aliases) {
+public record RepoDefinition(String name, Path path, Layer layer, String serviceName, String gatewayPrefix,
+        String feignName, List<String> aliases) {
 
     public RepoDefinition {
         Objects.requireNonNull(name, "name");

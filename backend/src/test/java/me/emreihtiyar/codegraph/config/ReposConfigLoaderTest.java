@@ -43,6 +43,7 @@ class ReposConfigLoaderTest {
                     layer: bff
                     serviceName: my-bff
                     gatewayPrefix: /my-bff/
+                    feignName: MY-BFF-SERVICE
                     aliases: [my-bff-v2, legacy-bff]
                 """);
 
@@ -52,6 +53,7 @@ class ReposConfigLoaderTest {
         assertThat(repo.layer()).isEqualTo(Layer.BFF);
         assertThat(repo.serviceName()).isEqualTo("my-bff");
         assertThat(repo.gatewayPrefix()).isEqualTo("my-bff");
+        assertThat(repo.feignName()).isEqualTo("MY-BFF-SERVICE");
         assertThat(repo.aliases()).containsExactly("my-bff-v2", "legacy-bff");
         assertThat(config.placeholders()).containsEntry("clients.credit.name", "credit-api");
     }

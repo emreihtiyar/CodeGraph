@@ -13,6 +13,7 @@ import me.emreihtiyar.codegraph.extract.java.JavaRepoAnalyzer;
 import me.emreihtiyar.codegraph.extract.java.TypeModel;
 import me.emreihtiyar.codegraph.extract.model.RepoFacts;
 import me.emreihtiyar.codegraph.extract.ts.FrontendRepoAnalyzer;
+import me.emreihtiyar.codegraph.link.Linker;
 import me.emreihtiyar.codegraph.scan.RepoScanner;
 
 /** Mini sistemin tüm repolarını analiz eden test yardımcısı (Link/Load testleri için). */
@@ -32,8 +33,8 @@ public final class MiniSystem {
         return facts;
     }
 
-    public static Map<String, List<String>> aliases() {
-        return CONFIG.repos().stream().collect(Collectors.toMap(RepoDefinition::name, RepoDefinition::aliases));
+    public static Map<String, Linker.RepoNames> names() {
+        return CONFIG.repos().stream().collect(Collectors.toMap(RepoDefinition::name, Linker.RepoNames::of));
     }
 
     public static ReposConfigProvider configProvider() {
