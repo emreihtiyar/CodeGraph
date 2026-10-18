@@ -14,13 +14,17 @@ import me.emreihtiyar.codegraph.extract.model.ApiCallVia;
 import me.emreihtiyar.codegraph.extract.model.ComponentFact;
 import me.emreihtiyar.codegraph.extract.model.RenderFact;
 import me.emreihtiyar.codegraph.extract.model.SourceRef;
+import me.emreihtiyar.codegraph.extract.ts.Js.Arr;
 import me.emreihtiyar.codegraph.extract.ts.Js.Call;
 import me.emreihtiyar.codegraph.extract.ts.Js.ClassNode;
 import me.emreihtiyar.codegraph.extract.ts.Js.Func;
 import me.emreihtiyar.codegraph.extract.ts.Js.Ident;
 import me.emreihtiyar.codegraph.extract.ts.Js.Jsx;
+import me.emreihtiyar.codegraph.extract.ts.Js.Literal;
 import me.emreihtiyar.codegraph.extract.ts.Js.Member;
 import me.emreihtiyar.codegraph.extract.ts.Js.Node;
+import me.emreihtiyar.codegraph.extract.ts.Js.Str;
+import me.emreihtiyar.codegraph.extract.ts.Js.Template;
 import me.emreihtiyar.codegraph.extract.ts.Js.VarDecl;
 import me.emreihtiyar.codegraph.extract.ts.JsProject.Symbol;
 
@@ -42,6 +46,8 @@ import me.emreihtiyar.codegraph.extract.ts.JsProject.Symbol;
  * </ul>
  * Özel hook'lar ({@code useX}) çağrıldıkları yerde component'e satır içi açılır; kullanımın {@code hook} alanı hook
  * zincirini tutar ({@code useSubContractPaymentPlan > useQuery}). Sıra kaynak sırasıdır.
+ *
+ * <p>RENDERS: JSX etiketleri ve değer olarak geçen component'ler; ayrıntı {@link #renders(Component)}'te.
  */
 final class ComponentExtractor {
 
@@ -215,15 +221,51 @@ final class ComponentExtractor {
 
     // ---- RENDERS ----
 
+    /** Component'in başvurduğu sabit ve yardımcı fonksiyon zincirinde en fazla kaç adım izlenir. */
+    private static final int MAX_FOLLOW_DEPTH = 4;
+
+    /**
+     * Component'in render ettiği proje component'leri:
+     * <ul>
+     *   <li>JSX etiketleri ({@code <SubContractUpdateModal/>}, {@code <Ui.Badge/>});</li>
+     *   <li>değer olarak geçen component'ler ({@code component: SubContractDetailsTab}, {@code Component={X}},
+     *       {@code createElement(X)}); {@code tabItems.map(item => <item.component/>)} gibi dinamik etiketler
+     *       bu değerlerden bulunur;</li>
+     *   <li>component'in başvurduğu modül düzeyi sabitlerin ve yardımcı fonksiyonların içindekiler
+     *       ({@code const tabItems = [...]}, {@code getColumns()}); başka dosyada olsalar da.</li>
+     * </ul>
+     * Route dizileri ve ApiCall'lar izlenmez: route listesinden menü kuran component tüm sayfaları render ediyor
+     * sayılmaz.
+     */
     List<RenderFact> renders(Component component) {
         Set<String> children = new LinkedHashSet<>();
-        Js.walk(component.impl(), n -> {
-            if (n instanceof Jsx j) {
-                componentOfTag(component.module(), j.name(), j.line())
-                        .filter(c -> !c.key().equals(component.key()))
-                        .ifPresent(c -> children.add(c.key()));
-            }
-        });
+        renders(component.impl(), component.module(), component, children, new HashSet<>(), 0);
         return children.stream().map(child -> new RenderFact(component.key(), child)).toList();
+    }
+
+    private void renders(Node node, JsModule module, Component self, Set<String> out, Set<String> followed,
+            int depth) {
+        Js.walk(node, n -> {
+            Optional<Component> child = Optional.empty();
+            if (n instanceof Jsx j) {
+                child = componentOfTag(module, j.name(), j.line());
+            } else if (n instanceof Ident || n instanceof Member) {
+                Optional<Symbol> symbol = project.resolve(module, n);
+                child = symbol.flatMap(this::componentOf);
+                if (child.isEmpty() && symbol.isPresent() && depth < MAX_FOLLOW_DEPTH && followable(symbol.get())
+                        && followed.add(symbol.get().key())) {
+                    renders(symbol.get().value(), symbol.get().module(), self, out, followed, depth + 1);
+                }
+            }
+            child.filter(c -> !c.key().equals(self.key())).ifPresent(c -> out.add(c.key()));
+        });
+    }
+
+    private boolean followable(Symbol symbol) {
+        Node value = symbol.value();
+        return value != null && !(value instanceof Str || value instanceof Literal || value instanceof Template
+                || value instanceof ClassNode)
+                && !(value instanceof Arr arr && RouteExtractor.isRouteArray(arr))
+                && !apiCallKeys.contains(symbol.key());
     }
 }

@@ -61,7 +61,8 @@ prefix'ini döndürür ve kendisi ApiCall değildir.
 ## Ekranlar ve component'ler
 
 Ekranlar `src/routes.ts` dizisindeki `{ path, component: asyncComponent(() => import("./screens/X")) }` nesnelerinden
-çıkarılır; component, import edilen modülün varsayılan export'udur.
+çıkarılır; component, import edilen modülün varsayılan export'udur. CreditApplicationScreen ApplicationForm'u JSX
+etiketiyle değil, sekme dizisinden (`tabItems` + `<item.component />`) render eder.
 
 | Route                   | Ekran component'i       | RENDERS                       | ApiCall kullanımı (sıra, via/hook) |
 |-------------------------|-------------------------|-------------------------------|------------------------------------|

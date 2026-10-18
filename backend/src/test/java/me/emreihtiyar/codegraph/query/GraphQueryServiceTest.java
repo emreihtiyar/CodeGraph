@@ -108,6 +108,9 @@ class GraphQueryServiceTest {
                 .allSatisfy(e -> assertThat(e.source()).isEqualTo(trace.start().id()))
                 .extracting(e -> e.properties().get("component"))
                 .containsExactlyInAnyOrder("CreditApplicationScreen", "ApplicationForm", "ScoreBadge");
+        assertThat(trace.graph().edges()).filteredOn(e -> e.type().equals("USES_API_CALL"))
+                .extracting(e -> e.properties().get("componentPath"))
+                .contains(List.of("CreditApplicationScreen", "ApplicationForm"));
 
         TraceResult full = queries.traceForward("/credit-application",
                 new TraceOptions(TraceOptions.DEFAULT_DEPTH, false, false, TraceOptions.DEFAULT_MAX_NODES));
@@ -217,6 +220,11 @@ class GraphQueryServiceTest {
                         tuple("API_CALL", "getCreditApplication", "CreditApplicationScreen", "useQuery"),
                         tuple("API_CALL", "createCreditApplication", "ApplicationForm", "useMutation"),
                         tuple("API_CALL", "getScore", "ScoreBadge", "useScore > useQuery"));
+        // Ekrandan isteği atan component'e giden yol (ApplicationForm sekme dizisinden render ediliyor)
+        assertThat(screen.children()).extracting(c -> c.call().get("componentPath")).containsExactly(
+                List.of("CreditApplicationScreen"),
+                List.of("CreditApplicationScreen", "ApplicationForm"),
+                List.of("CreditApplicationScreen", "ScoreBadge"));
         CallTreeNode create = screen.children().get(1);
         assertThat(create.details()).containsEntry("httpMethod", "POST").containsEntry("targetService", "leasing-credit-bff");
         assertThat(create.children()).singleElement().satisfies(endpoint -> {

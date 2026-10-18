@@ -3,7 +3,7 @@ import { api } from '../api/client.ts';
 import type { CallTreeNode, CallTreeOptions } from '../api/types.ts';
 import { StartPicker } from '../components/StartPicker.tsx';
 import { Badge, ErrorBox, Spinner, Toggle } from '../components/ui.tsx';
-import { KIND_LABEL, LABELS } from '../lib/labels.ts';
+import { KIND_LABEL, LABELS, requestOrigin } from '../lib/labels.ts';
 import { navigate } from '../lib/route.ts';
 import { ancestorIds, loadedKeys, nodeAt, pathKey, withChildren, type TreePath } from '../lib/tree.ts';
 import { useAsync } from '../lib/useAsync.ts';
@@ -252,12 +252,16 @@ function Details({ node }: { node: CallTreeNode }) {
   return null;
 }
 
-/** Ekranın isteğinin çıktığı yer: component ve (varsa) hook zinciri, ör. {@code useScore > useQuery}. */
+/**
+ * Ekranın isteğinin çıktığı yer: sayfadan component'e yol (sekme › modal) ve (varsa) hook zinciri,
+ * ör. {@code useScore > useQuery}.
+ */
 function RequestSource({ call }: { call: Record<string, unknown> }) {
   const components = Array.isArray(call.components) ? (call.components as string[]) : [];
+  const path = Array.isArray(call.componentPath) ? (call.componentPath as string[]) : [];
   return (
     <span className="tree-details muted small">
-      · {String(call.component ?? '')}
+      · <span title={path.join(' › ')}>{requestOrigin(call)}</span>
       {components.length > 1 && <span title={components.join(', ')}> +{components.length - 1}</span>}
       {typeof call.hook === 'string' && <> <Badge tone="info" title="İsteği saran hook zinciri">{call.hook}</Badge></>}
     </span>

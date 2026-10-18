@@ -1,6 +1,6 @@
 import { api } from '../api/client.ts';
 import type { CallTreeNode } from '../api/types.ts';
-import { isCallable, LABELS } from '../lib/labels.ts';
+import { isCallable, LABELS, requestOrigin } from '../lib/labels.ts';
 import { navigate } from '../lib/route.ts';
 import { useAsync } from '../lib/useAsync.ts';
 import { useAppState, type CodeTab } from '../state.tsx';
@@ -74,7 +74,7 @@ function ScreenRequests({ id }: { id: string }) {
       <ul className="plain-list">
         {requests.map((r) => (
           <li key={r.nodeId} className="request-item">
-            <RequestLine apiCall={asApiCall(r)} detail={<> · {String(r.call?.component ?? '')}</>} onClick={() => openCode(...requestCode(r))} />
+            <RequestLine apiCall={asApiCall(r)} detail={<> · {requestOrigin(r.call ?? {})}</>} onClick={() => openCode(...requestCode(r))} />
             {typeof r.call?.hook === 'string' && <Badge tone="info" title="İsteği saran hook zinciri">{r.call.hook}</Badge>}
             {r.details.resolution === 'UNRESOLVED' && <Badge tone="danger" title={String(r.details.unresolvedReason ?? '')}>çözülemedi</Badge>}
             {(r.children ?? []).map((e) => (

@@ -68,8 +68,9 @@ Ekranlar route dizilerinden çıkar: `path` ile birlikte `component`/`element` i
    bulunan her route dizisini (`… route dizisi`) ve her ekranı (`ekran /path 'Ad' → dosya#component`) yazar.
 2. `Route '…': component bulunamadı` sorunu, import edilen dosyanın projede olmadığını ya da varsayılan export'unun
    component olarak tanınmadığını gösterir.
-3. Ekran var ama isteği yoksa ekranın component'lerinde ApiCall kullanımı bulunamamıştır; TRACE seviyesi her
-   kullanımı (`component → ApiCall`) listeler.
+3. Ekran var ama isteği yoksa ekranın component ağacında ApiCall kullanımı bulunamamıştır; TRACE seviyesi her
+   kullanımı (`component → ApiCall`) ve her RENDERS bağını (`component ⊃ alt component`) listeler. Sekme ve
+   modaller JSX etiketiyle ya da `component: X` gibi değerlerle (sekme dizileri) bulunur.
 4. `Sözdizimi hatası` sorunları ayrıştırıcının tanımadığı bir yapıyı gösterir; sorunun sonundaki `⟨…⟩` hatalı satırın
    kodudur. Hatalı dosyanın yalnızca bozuk kısmı atlanır, geri kalanı analiz edilir.
 

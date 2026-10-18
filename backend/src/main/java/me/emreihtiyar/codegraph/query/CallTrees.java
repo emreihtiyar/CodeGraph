@@ -34,7 +34,7 @@ final class CallTrees {
     private static final String SCREENS = "MATCH (s:Screen) WHERE s.id IN $ids RETURN s.id AS id";
     private static final String RENDERED = """
             MATCH (n:Node)-[:RENDERS]->(c:Component) WHERE n.id IN $ids
-            RETURN c.id AS id ORDER BY c.name, c.id""";
+            RETURN n.id AS parent, c.id AS id, c.name AS name ORDER BY c.name, c.id""";
     private static final String USAGES = """
             MATCH (c:Component)-[u:USES_API_CALL]->(a:ApiCall) WHERE c.id IN $ids
             RETURN c.id AS component, c.name AS componentName, u, a""";
@@ -149,10 +149,12 @@ final class CallTrees {
     /**
      * Ekranın component ağacındaki (RENDERS) tüm ApiCall kullanımları; önce üst component'ler, her component'te kod
      * sırasıyla. Aynı ApiCall birden çok component'te kullanılıyorsa bir kez yer alır, {@code components} hepsini
-     * sayar. Kenar sentetiktir: ekran → ApiCall, özelliklerinde component, satır ve via/hook.
+     * sayar. Kenar sentetiktir: ekran → ApiCall, özelliklerinde component, ekrandan component'e giden yol
+     * ({@code componentPath}: sayfa › sekme › modal), satır ve via/hook.
      */
     private List<Child> requests(String screenId) {
         Map<String, Integer> rank = new LinkedHashMap<>();
+        Map<String, List<String>> paths = new HashMap<>();
         Set<String> frontier = Set.of(screenId);
         for (int depth = 0; depth < MAX_RENDER_DEPTH && !frontier.isEmpty() && rank.size() < MAX_SCREEN_COMPONENTS;
                 depth++) {
@@ -161,6 +163,9 @@ final class CallTrees {
                 String id = (String) row.get("id");
                 if (!rank.containsKey(id)) {
                     rank.put(id, rank.size());
+                    List<String> path = new ArrayList<>(paths.getOrDefault((String) row.get("parent"), List.of()));
+                    path.add((String) row.get("name"));
+                    paths.put(id, path);
                     next.add(id);
                 }
             }
@@ -195,6 +200,7 @@ final class CallTrees {
             putIfPresent(props, "hook", usage.get("hook"));
             props.put("component", component);
             props.put("componentId", row.get("component"));
+            props.put("componentPath", paths.get((String) row.get("component")));
             props.put("components", new ArrayList<>(List.of(component)));
             byApiCall.put(apiCall.id(), new Child(new GraphRelationship("USES_API_CALL", screenId, apiCall.id(), props),
                     apiCall));

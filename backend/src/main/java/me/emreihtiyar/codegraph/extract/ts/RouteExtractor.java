@@ -101,7 +101,7 @@ final class RouteExtractor {
         Js.forEachChild(node, child -> scan(child, module, arrays));
     }
 
-    private static boolean isRouteArray(Arr arr) {
+    static boolean isRouteArray(Arr arr) {
         for (Node element : arr.elements()) {
             if (element instanceof Obj o && (prop(o, "path").isPresent() || prop(o, "index").isPresent())
                     && (COMPONENT_KEYS.stream().anyMatch(k -> prop(o, k).isPresent()) || prop(o, "children").isPresent())) {

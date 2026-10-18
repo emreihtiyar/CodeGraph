@@ -123,8 +123,9 @@ final class Traversal {
     /**
      * Ekranların component ağacını gizler: ekrandan RENDERS ile ulaşılan component'ler çıkarılır, kullandıkları
      * ApiCall'lar ekrana doğrudan {@code USES_API_CALL} kenarıyla bağlanır. Kenar özellikleri isteğin çıktığı yeri
-     * taşır: {@code component}, {@code componentId}, {@code line}, {@code via}, {@code hook}. Hiçbir ekrandan
-     * ulaşılamayan component'ler (ör. geri izde route'u olmayan) olduğu gibi kalır.
+     * taşır: {@code component}, {@code componentId}, {@code componentPath} (ekrandan component'e: sayfa › sekme ›
+     * modal), {@code line}, {@code via}, {@code hook}. Hiçbir ekrandan ulaşılamayan component'ler (ör. geri izde
+     * route'u olmayan) olduğu gibi kalır.
      */
     static Result collapseScreens(Result result) {
         Map<String, List<GraphRelationship>> renders = new HashMap<>();
@@ -142,7 +143,7 @@ final class Traversal {
             if (!screen.labels().contains("Screen")) {
                 continue;
             }
-            Set<String> visited = new HashSet<>(Set.of(screen.id()));
+            Map<String, List<String>> paths = new HashMap<>(Map.of(screen.id(), List.of()));
             Set<String> apiCalls = new HashSet<>();
             ArrayDeque<String> queue = new ArrayDeque<>(List.of(screen.id()));
             while (!queue.isEmpty()) {
@@ -153,11 +154,15 @@ final class Traversal {
                         props.put("order", apiCalls.size());
                         props.put("component", NodeSummary.of(result.nodes().get(id)).name());
                         props.put("componentId", id);
+                        props.put("componentPath", paths.get(id));
                         direct.add(new GraphRelationship("USES_API_CALL", screen.id(), u.endId(), props));
                     }
                 }
                 for (GraphRelationship r : renders.getOrDefault(id, List.of())) {
-                    if (visited.add(r.endId())) {
+                    if (!paths.containsKey(r.endId()) && result.nodes().containsKey(r.endId())) {
+                        List<String> path = new ArrayList<>(paths.get(id));
+                        path.add(NodeSummary.of(result.nodes().get(r.endId())).name());
+                        paths.put(r.endId(), path);
                         hidden.add(r.endId());
                         queue.add(r.endId());
                     }

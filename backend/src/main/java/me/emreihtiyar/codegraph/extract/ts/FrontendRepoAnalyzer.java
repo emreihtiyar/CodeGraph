@@ -79,6 +79,8 @@ public class FrontendRepoAnalyzer {
             facts.components().forEach(c -> log.trace("{}: component {}", repo.name(), c.key()));
             facts.apiCallUsages().forEach(u -> log.trace("{}: {} → {} ({})", repo.name(), u.componentKey(),
                     u.apiCallKey(), u.via()));
+            facts.renders().forEach(r -> log.trace("{}: {} ⊃ {}", repo.name(), r.parentComponentKey(),
+                    r.childComponentKey()));
         }
         facts.screens().forEach(s -> log.debug("{}: ekran {} '{}' → {}", repo.name(), s.routePath(), s.name(),
                 s.componentKey()));

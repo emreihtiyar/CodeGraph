@@ -200,6 +200,16 @@ FR-21 kod panelinin "ilgili satır vurgulu" açılmasını istiyor. Bir kenar (�
     component'e açılıyor. Kullanımın `hook` alanı zinciri tutuyor (`useSubContractPaymentPlan > useQuery`); satırı
     component'teki çağrı satırı.
   - Aynı ApiCall aynı yolla (via/hook) birden çok kez kullanılırsa tek kullanım sayılıyor.
+  - RENDERS (component → alt component) şunlardan çıkıyor:
+    - JSX etiketleri (`<SubContractUpdateModal/>`, koşullu `{visible && <X/>}` dahil);
+    - değer olarak geçen component'ler (`component: SubContractDetailsTab`, `Component={X}`, `createElement(X)`).
+      `tabItems.map(item => <item.component/>)` gibi dinamik etiketler bu değerlerden bulunuyor;
+    - component'in başvurduğu modül düzeyi sabitlerin ve yardımcı fonksiyonların içi (`const tabItems = [...]`,
+      `getColumns()`), başka dosyada olsalar da (en çok 4 adım).
+  - Route dizileri ve ApiCall gövdeleri izlenmiyor. Yoksa route listesinden menü kuran bir component tüm sayfaları
+    render ediyor sayılırdı.
+  - Ekranın istekleri RENDERS ağacının tamamından toplanıyor. Her isteğin `componentPath`'i ekrandan isteği atan
+    component'e giden yol; arayüzde sayfa atlanarak gösteriliyor (`SubContractDetailsTab › SubContractUpdateModal`).
   - Ekranlar route dizilerinden (bkz. Q8b) ve JSX `<Route>` ağaçlarından çıkıyor.
   - Route `element`'i sarmalayıcı içeriyorsa (`<Suspense>`, `<RequireAuth>`) en içteki proje component'i ekran oluyor.
   - Path'siz layout route'ları ekran sayılmıyor; `index: true` route'u üst route'un path'ini alıyor.

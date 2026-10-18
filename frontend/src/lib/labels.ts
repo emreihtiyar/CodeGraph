@@ -76,3 +76,13 @@ export function isCallable(label: NodeLabel): boolean {
   return label === 'Method' || label === 'FeignMethod' || label === 'RepositoryMethod' || label === 'Endpoint'
     || label === 'Screen' || label === 'ApiCall';
 }
+
+/**
+ * Ekran isteğinin çıktığı yer: ekrandan isteği atan component'e giden yol, sayfanın kendisi atlanarak
+ * (`SubContractDetailsTab › SubContractUpdateModal`); istek sayfanın kendisindeyse onun adı.
+ */
+export function requestOrigin(call: Record<string, unknown>): string {
+  const path = Array.isArray(call.componentPath) ? (call.componentPath as string[]) : [];
+  if (path.length > 1) return path.slice(1).join(' › ');
+  return String(call.component ?? path[0] ?? '');
+}

@@ -4,6 +4,9 @@ import { getCreditApplication } from '../api/creditApplicationApiCalls';
 import ApplicationForm from '../components/ApplicationForm';
 import ScoreBadge from '../components/ScoreBadge';
 
+// Sekmeler yapılandırma dizisinden render edilir: <item.component />
+const tabItems = [{ key: 'form', title: 'Başvuru', visible: true, component: ApplicationForm }];
+
 export default function CreditApplicationScreen() {
   const { applicationId } = useParams();
   const { data } = useQuery({
@@ -16,7 +19,13 @@ export default function CreditApplicationScreen() {
     <div className="screen">
       <h1>Kredi Başvurusu</h1>
       {data && <ScoreBadge customerId={data.credit.customerId} />}
-      <ApplicationForm />
+      {tabItems
+        .filter((t) => t.visible)
+        .map((item) => (
+          <section key={item.key} title={item.title}>
+            <item.component />
+          </section>
+        ))}
     </div>
   );
 }
