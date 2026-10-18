@@ -41,6 +41,7 @@ class FrontendRepoAnalyzerTest {
         assertThat(facts.service().name()).isEqualTo("leasing-web");
     }
 
+    /** {@code getBaseUrl} gibi callApi çağırmayan export'lar ApiCall değildir. */
     @Test
     void apiCalls() {
         assertThat(facts.apiCalls())
@@ -58,13 +59,17 @@ class FrontendRepoAnalyzerTest {
     void apiCallTemplatesAndCode() {
         ApiCallFact get = facts.apiCalls().stream()
                 .filter(a -> a.name().equals("getCreditApplication")).findFirst().orElseThrow();
-        assertThat(get.urlTemplate()).isEqualTo("{gateway}/leasing-credit-bff/applications/{*}");
-        assertThat(get.source().startLine()).isEqualTo(12);
-        assertThat(get.source().endLine()).isEqualTo(15);
-        assertThat(get.code()).startsWith("export const getCreditApplication").contains("fetch(");
+        assertThat(get.urlTemplate()).isEqualTo("leasing-credit-bff/applications/{*}");
+        assertThat(get.source().startLine()).isEqualTo(13);
+        assertThat(get.source().endLine()).isEqualTo(19);
+        assertThat(get.code()).startsWith("export function getCreditApplication").contains("callApi(");
+        ApiCallFact create = facts.apiCalls().stream()
+                .filter(a -> a.name().equals("createCreditApplication")).findFirst().orElseThrow();
+        assertThat(create.source().startLine()).isEqualTo(21);
+        assertThat(create.code()).startsWith("export const createCreditApplication");
         ApiCallFact document = facts.apiCalls().stream()
                 .filter(a -> a.name().equals("getApplicationDocument")).findFirst().orElseThrow();
-        assertThat(document.urlTemplate()).isEqualTo("{gateway}{*}");
+        assertThat(document.urlTemplate()).isEqualTo("{*}");
     }
 
     @Test
@@ -102,8 +107,8 @@ class FrontendRepoAnalyzerTest {
                         tuple(CREDIT_SCREEN, CREDIT_API + "getCreditApplication", 1, ApiCallVia.REACT_QUERY, "useQuery"),
                         tuple(CUSTOMER_SCREEN, SCORING_API + "getScore", 1, ApiCallVia.REACT_QUERY, "useQueries"),
                         tuple(CUSTOMER_SCREEN, SCORING_API + "getCustomerSummary", 2, ApiCallVia.REACT_QUERY, "useQueries"),
-                        tuple(CUSTOMER_SCREEN, SCORING_API + "getScoreHistory", 3, ApiCallVia.FETCH, null),
+                        tuple(CUSTOMER_SCREEN, SCORING_API + "getScoreHistory", 3, ApiCallVia.DIRECT, null),
                         tuple(FORM, CREDIT_API + "createCreditApplication", 1, ApiCallVia.REACT_QUERY, "useMutation"),
-                        tuple(BADGE, SCORING_API + "getScore", 1, ApiCallVia.REACT_QUERY, "useQuery"));
+                        tuple(BADGE, SCORING_API + "getScore", 1, ApiCallVia.REACT_QUERY, "useScore > useQuery"));
     }
 }

@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Pattern;
 import me.emreihtiyar.codegraph.extract.PathNormalizer;
 import me.emreihtiyar.codegraph.extract.ts.Js.Arr;
 import me.emreihtiyar.codegraph.extract.ts.Js.Binary;
@@ -26,26 +25,21 @@ import me.emreihtiyar.codegraph.extract.ts.Js.VarDecl;
 import me.emreihtiyar.codegraph.extract.ts.JsProject.Symbol;
 
 /**
- * URL ifadelerinin statik değerlendirmesi (PRD FR-07). Sonuç parçalardan oluşur:
+ * {@code callApi} endpoint ifadelerinin statik değerlendirmesi (PRD FR-07). Sonuç parçalardan oluşur:
  * <ul>
  *   <li>metin: literaller ve çözülebilen sabitler (import edilenler dahil),</li>
- *   <li>gateway: ortam değişkeni ({@code import.meta.env.X}, {@code process.env.X}, {@code window._env_.X}) — gateway
- *       taban adresi kabul edilir,</li>
  *   <li>dinamik: parametreler ve değerlendirilemeyen ifadeler; path'te {@code {*}} olur.</li>
  * </ul>
- * Basit yardımcı fonksiyonlar ({@code buildUrl(path)} gibi tek {@code return} ifadesi olanlar) argümanlar
- * bağlanarak satır içi değerlendirilir.
+ * Tek {@code return} ifadeli fonksiyonlar ({@code getBaseUrl()} gibi) argümanlar bağlanarak satır içi değerlendirilir.
  */
 final class UrlEvaluator {
 
     enum Kind {
         TEXT,
-        GATEWAY,
         DYNAMIC
     }
 
     record Part(Kind kind, String text) {
-        static final Part GATEWAY = new Part(Kind.GATEWAY, null);
         static final Part DYNAMIC = new Part(Kind.DYNAMIC, null);
 
         static Part text(String text) {
@@ -54,13 +48,11 @@ final class UrlEvaluator {
     }
 
     /**
-     * @param targetPrefix   gateway sonrası ilk segment (hedef BFF)
+     * @param targetPrefix   endpoint'in ilk segmenti (hedef BFF'in gateway prefix'i)
      * @param normalizedPath kalan path, normalize edilmiş
      */
     record Target(String targetPrefix, String normalizedPath) {}
 
-    private static final Pattern ENV_ACCESS = Pattern.compile(
-            "^(import\\.meta\\.env|process\\.env|window\\.(_env_|env|__ENV__|ENV|__env))\\.[\\w$]+$");
     private static final int MAX_DEPTH = 8;
 
     /** Değerlendirme kapsamı: fonksiyon parametrelerine bağlı değerler ve fonksiyon içi yerel bildirimler. */
@@ -144,10 +136,6 @@ final class UrlEvaluator {
             return evalName(i.name(), scope, depth);
         }
         if (node instanceof Member m) {
-            String dotted = Js.dottedName(m);
-            if (dotted != null && ENV_ACCESS.matcher(dotted).matches()) {
-                return List.of(Part.GATEWAY);
-            }
             Optional<Node> property = property(m.object(), m.property(), scope);
             if (property.isPresent()) {
                 return eval(property.get(), scope, depth + 1);
@@ -298,85 +286,29 @@ final class UrlEvaluator {
         return out;
     }
 
-    /** Okunabilir şablon: gateway {@code {gateway}}, dinamik kısım {@code {*}}. */
+    /** Okunabilir şablon; dinamik kısım {@code {*}}. */
     static String render(List<Part> parts) {
         StringBuilder sb = new StringBuilder();
         for (Part p : parts) {
-            sb.append(switch (p.kind()) {
-                case TEXT -> p.text();
-                case GATEWAY -> "{gateway}";
-                case DYNAMIC -> PathNormalizer.WILDCARD;
-            });
+            sb.append(p.kind() == Kind.TEXT ? p.text() : PathNormalizer.WILDCARD);
         }
         return sb.toString();
     }
 
-    /** Taban adresli istemcinin göreli URL'si: taban + URL (URL mutlaksa yalnızca URL). */
-    static List<Part> withBase(List<Part> base, List<Part> url) {
-        if (base == null || base.isEmpty() || isAbsolute(url)) {
-            return url;
-        }
-        List<Part> out = new ArrayList<>(base);
-        if (!url.isEmpty() && url.get(0).kind() == Kind.TEXT && !url.get(0).text().startsWith("/")) {
-            out.add(Part.text("/"));
-        }
-        out.addAll(url);
-        return merge(out);
-    }
-
-    private static boolean isAbsolute(List<Part> url) {
-        if (url.isEmpty()) {
-            return false;
-        }
-        Part first = url.get(0);
-        return first.kind() == Kind.GATEWAY
-                || first.kind() == Kind.TEXT && first.text().matches("(?i)^(https?:)?//.*");
-    }
-
-    /** URL path'e benziyor mu (genel istemcilerde {@code map.get(key)} gibi yanlış pozitifleri elemek için). */
-    static boolean looksLikeUrl(List<Part> url) {
-        if (url.isEmpty()) {
-            return false;
-        }
-        Part first = url.get(0);
-        return first.kind() == Kind.GATEWAY
-                || first.kind() == Kind.TEXT && (first.text().startsWith("/") || first.text().matches("(?i)^https?://.*"));
-    }
-
     /**
-     * Gateway sonrası hedef: ilk segment BFF'in gateway prefix'i, kalanı BFF'teki path. Gateway tabanı ortam
-     * değişkeni, mutlak adresin host'u veya ({@code /} ile başlayan göreli URL'de) proxy kabul edilir. İlk segment
-     * statik değilse hedef çözülemez.
+     * Gateway'e göreli endpoint'in hedefi: ilk segment BFF'in gateway prefix'i, kalanı BFF'teki path
+     * ({@code leasing-contract-bff/api/x/{*}} → {@code leasing-contract-bff} + {@code /api/x/{*}}). Baştaki {@code /}
+     * önemsizdir. İlk segment statik değilse hedef çözülemez.
      */
     static Optional<Target> target(List<Part> parts) {
-        if (parts.isEmpty()) {
+        if (parts.isEmpty() || parts.get(0).kind() != Kind.TEXT) {
             return Optional.empty();
         }
-        List<Part> rest = new ArrayList<>();
-        Part first = parts.get(0);
-        if (first.kind() == Kind.GATEWAY) {
-            rest.addAll(parts.subList(1, parts.size()));
-        } else if (first.kind() == Kind.TEXT && first.text().matches("(?i)^(https?:)?//.*")) {
-            String text = first.text().replaceFirst("(?i)^(https?:)?//[^/]*", "");
-            if (text.isEmpty() && parts.size() > 1) {
-                return Optional.empty(); // host dinamik devam ediyor
-            }
-            rest.add(Part.text(text));
-            rest.addAll(parts.subList(1, parts.size()));
-        } else if (first.kind() == Kind.TEXT && first.text().startsWith("/")) {
-            rest.addAll(parts);
-        } else {
-            return Optional.empty();
-        }
-        String path = render(merge(rest)).replace("{gateway}", PathNormalizer.WILDCARD);
-        if (!path.startsWith("/")) {
-            return Optional.empty(); // gateway'den sonra doğrudan dinamik kısım: buildUrl(path)
-        }
-        String cleaned = PathNormalizer.clean(path);
+        String cleaned = PathNormalizer.clean(render(parts));
         String[] segments = cleaned.substring(1).split("/", 2);
         String prefix = segments[0];
         if (prefix.isEmpty() || prefix.contains("{") || prefix.contains("$")) {
-            return Optional.empty();
+            return Optional.empty(); // ör. getBaseUrl() + path: prefix'e dinamik kısım bitişik
         }
         String remaining = segments.length > 1 ? segments[1] : "";
         return Optional.of(new Target(prefix, PathNormalizer.normalize(remaining)));

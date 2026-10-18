@@ -32,9 +32,16 @@ import me.emreihtiyar.codegraph.extract.ts.JsProject.Symbol;
  * export (adı dosyadan gelir).
  *
  * <p>ApiCall kullanımı: component gövdesinde ApiCall'a yapılan her başvuru (çağrı veya {@code mutationFn: x} gibi
- * referans). React Query hook'larının ({@code useQuery}, {@code useMutation}...) argümanları içindekiler
- * {@link ApiCallVia#REACT_QUERY}, diğerleri {@link ApiCallVia#FETCH} olarak işaretlenir. Projedeki özel hook'lar
- * ({@code useX}) çağrıldıkları yerde component'e satır içi açılır. Sıra kaynak sırasıdır.
+ * referans). İki kullanım biçimi desteklenir:
+ * <ul>
+ *   <li>doğrudan çağrı, ör. olay işleyicisinde {@code const r = await searchSubContracts(req)} —
+ *       {@link ApiCallVia#DIRECT};</li>
+ *   <li>React Query hook'u içinden, component'te ya da projedeki özel bir hook'ta
+ *       ({@code useSubContractPaymentPlan(id)} → {@code useQuery({ queryFn: () => getPaymentPlan(id) })}) —
+ *       {@link ApiCallVia#REACT_QUERY}.</li>
+ * </ul>
+ * Özel hook'lar ({@code useX}) çağrıldıkları yerde component'e satır içi açılır; kullanımın {@code hook} alanı hook
+ * zincirini tutar ({@code useSubContractPaymentPlan > useQuery}). Sıra kaynak sırasıdır.
  */
 final class ComponentExtractor {
 
@@ -154,7 +161,7 @@ final class ComponentExtractor {
 
     List<ApiCallUsageFact> usages(Component component) {
         List<Usage> found = new ArrayList<>();
-        walk(component.impl(), component.module(), null, -1, new HashSet<>(), found);
+        walk(component.impl(), component.module(), null, null, -1, new HashSet<>(), found);
         List<ApiCallUsageFact> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         for (Usage u : found) {
@@ -166,24 +173,23 @@ final class ComponentExtractor {
     }
 
     /**
-     * @param hook     içinde bulunulan React Query hook'u; yoksa null
-     * @param siteLine satır içi açılan özel hook'ta, component'teki çağrı satırı; aksi halde -1
+     * @param customHooks içinden geçilen özel hook'lar ({@code useA > useB}); yoksa null
+     * @param queryHook   içinde bulunulan React Query hook'u; yoksa null
+     * @param siteLine    satır içi açılan özel hook'ta, component'teki çağrı satırı; aksi halde -1
      */
-    private void walk(Node node, JsModule module, String hook, int siteLine, Set<Func> openHooks, List<Usage> out) {
+    private void walk(Node node, JsModule module, String customHooks, String queryHook, int siteLine,
+            Set<Func> openHooks, List<Usage> out) {
         if (node instanceof Call call) {
             String name = Js.calleeName(call);
-            if (name != null && REACT_QUERY_HOOKS.contains(name)) {
-                walk(call.callee(), module, hook, siteLine, openHooks, out);
-                call.args().forEach(a -> walk(a, module, name, siteLine, openHooks, out));
-                return;
-            }
-            walk(call.callee(), module, hook, siteLine, openHooks, out);
-            call.args().forEach(a -> walk(a, module, hook, siteLine, openHooks, out));
+            String argHook = name != null && REACT_QUERY_HOOKS.contains(name) ? name : queryHook;
+            walk(call.callee(), module, customHooks, queryHook, siteLine, openHooks, out);
+            call.args().forEach(a -> walk(a, module, customHooks, argHook, siteLine, openHooks, out));
             if (isCustomHookName(name)) {
                 Optional<Symbol> symbol = project.resolve(module, call.callee());
                 if (symbol.isPresent() && symbol.get().value() instanceof Func f && openHooks.add(f)) {
                     int line = siteLine < 0 ? call.line() : siteLine;
-                    f.body().forEach(s -> walk(s, symbol.get().module(), hook, line, openHooks, out));
+                    String chain = customHooks == null ? name : customHooks + " > " + name;
+                    f.body().forEach(s -> walk(s, symbol.get().module(), chain, queryHook, line, openHooks, out));
                     openHooks.remove(f);
                 }
             }
@@ -192,12 +198,14 @@ final class ComponentExtractor {
         if (node instanceof Ident || node instanceof Member) {
             Optional<Symbol> symbol = project.resolve(module, node);
             if (symbol.isPresent() && apiCallKeys.contains(symbol.get().key())) {
-                ApiCallVia via = hook != null ? ApiCallVia.REACT_QUERY : ApiCallVia.FETCH;
+                ApiCallVia via = queryHook != null ? ApiCallVia.REACT_QUERY : ApiCallVia.DIRECT;
+                String hook = customHooks == null ? queryHook
+                        : queryHook == null ? customHooks : customHooks + " > " + queryHook;
                 out.add(new Usage(symbol.get().key(), via, hook, siteLine < 0 ? node.line() : siteLine));
                 return;
             }
         }
-        Js.forEachChild(node, child -> walk(child, module, hook, siteLine, openHooks, out));
+        Js.forEachChild(node, child -> walk(child, module, customHooks, queryHook, siteLine, openHooks, out));
     }
 
     private static boolean isCustomHookName(String name) {

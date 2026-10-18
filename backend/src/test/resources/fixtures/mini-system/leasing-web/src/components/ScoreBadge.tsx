@@ -1,13 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
-import { getScore } from '../api/scoringApiCalls';
+import { useScore } from '../shared/hooks/useScoring';
 
 interface Props {
   customerId: number;
 }
 
 export const ScoreBadge = ({ customerId }: Props) => {
-  const { data: score } = useQuery({ queryKey: ['score', customerId], queryFn: () => getScore(customerId) });
-  return <span className="badge">{score ?? '-'}</span>;
+  const { data: score, isLoading } = useScore(customerId);
+  return <span className="badge">{isLoading ? '…' : score ?? '-'}</span>;
 };
 
 export default ScoreBadge;

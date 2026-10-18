@@ -41,26 +41,24 @@ bunları gizleyecek.
 ## Frontend (M4)
 
 ### Q6. Gerçek ApiCalls dosyalarındaki HTTP istemcisi
-Şu kalıplar tanınıyor:
-- `fetch(url, { method })`;
-- `axios(config)`, `axios.get(url)` vb.;
-- `axios.create({ baseURL })` ile oluşturulmuş istemciler (taban adres URL'nin önüne ekleniyor);
-- path'e benzeyen URL ile çağrılan genel istemciler (`http.get('/x')`);
-- tek `return`'lü yardımcı fonksiyonlar (`buildUrl(...)`) ve içinde HTTP çağrısı olan yardımcılar (`request('POST', url)`), en fazla 3 seviye.
+Gerçek UI'larda tek kalıp var: ApiCalls dosyası (`ApiCalls.ts`, `XxxApiCalls.ts`) export edilen fonksiyonlardan oluşuyor
+ve her biri ortak `callApi({ endpoint, method, body, notifyErrors })` yardımcısını çağırıyor. `endpoint` gateway'e
+göreli: `getBaseUrl() + "/api/..."`, `getBaseUrl()` de BFF'in gateway prefix'ini (`"leasing-contract-bff"`) döndürüyor.
+Arama yalnızca bu kalıba göre yapılıyor; `fetch`/`axios` desteği kaldırıldı. `callApi` çağırmayan export'lar
+(`getBaseUrl` gibi) ApiCall sayılmıyor.
+- Cevap: `callApi` kullanılıyor (örnek ekran görüntüleriyle iletildi).
 
-Sınıf tabanlı servisler (`class ScoringApi { getScore() {...} }` + `export default new ScoringApi()`) ve
-interceptor'la değişen URL'ler tanınmıyor. HTTP çağrısı bulunamayan export'lar sorun olarak raporlanıyor.
-- **Varsayım:** ApiCalls dosyaları export edilen fonksiyonlardan (veya fonksiyon içeren export edilmiş nesne
-  literallerinden) oluşuyor ve yukarıdaki istemcilerden birini kullanıyor. Farklıysa bir örnek dosya iletirsen
-  ona göre genişletirim.
+### Q6b. `callApi`'de `method` verilmezse
+Örneklerde `method` hep yazılmış. Verilmezse GET kabul ediliyor; `method` bir değişkense (statik bilinemiyorsa) ANY.
+- **Varsayım:** `callApi`'nin varsayılanı GET. Farklıysa söyle, değiştireyim.
 - Cevap:
 
 ### Q7. Gateway URL yapısı
-Frontend URL'i `<gateway taban adresi>/<BFF gateway prefix'i>/<BFF path'i>` kabul ediliyor. Gateway taban adresi bir
-ortam değişkeni olabilir (`import.meta.env.X`, `process.env.X`, `window._env_.X`), mutlak bir adresin host'u olabilir
-ya da `/` ile başlayan göreli URL'lerde proxy olabilir. Gateway ile BFF prefix'i arasında ortak bir ek varsa
-(ör. `/api/leasing-credit-bff/...`), ilk segment yanlışlıkla `api` olur.
-- **Varsayım:** Ortak ek yok. Varsa repo yapılandırmasına `gatewayBasePath` (ör. `/api`) eklerim.
+`endpoint`'in ilk segmenti BFF'in gateway prefix'i, kalanı BFF'teki path kabul ediliyor
+(`leasing-contract-bff/api/sub-contract-query/page-load` → `leasing-contract-bff` + `/api/sub-contract-query/page-load`).
+Prefix BFF'e servis adı (`LEASING.NGLA.leasing-contract-bff` → son parça), repo adı, `aliases` ya da
+`gateway-prefix` ile eşleniyor.
+- **Varsayım:** `callApi` endpoint'in önüne yalnızca gateway taban adresini ekliyor; araya başka bir ek koymuyor.
 - Cevap:
 
 ### Q8. Import takma adları
@@ -152,9 +150,9 @@ FR-21 kod panelinin "ilgili satır vurgulu" açılmasını istiyor. Bir kenar (�
   12 bin satırlık bir TSX dosyası JVM'deki ilk ayrıştırmada ~18 sn sürüyor (ANTLR DFA önbelleğinin ısınması).
   Sonraki dosyalarda aynı dosya ~50 ms. Önbellek JVM boyunca paylaşılıyor; yani bu maliyet analiz başına bir kez
   ödeniyor.
-- **D12. ApiCall URL'i:** `urlTemplate` değerlendirilmiş biçimde tutuluyor: gateway için `{gateway}`, dinamik kısımlar
-  için `{*}` (ör. `{gateway}/leasing-credit-bff/applications/{*}`). Gateway sonrası ilk segment `targetPrefix` (BFF'in
-  gateway prefix'i); kalan kısım `normalizedPath` oluyor. İlk segment statik değilse ikisi de `null` kalıyor ve
+- **D12. ApiCall URL'i:** `urlTemplate`, `callApi` endpoint'inin değerlendirilmiş hali; dinamik kısımlar `{*}`
+  (ör. `leasing-contract-bff/api/sub-contract-view/{*}/payment-plan`). İlk segment `targetPrefix` (BFF'in gateway
+  prefix'i); kalan kısım `normalizedPath` oluyor. İlk segment statik değilse ikisi de `null` kalıyor ve
   bağlantı `UNRESOLVED` sayılıyor. Kaynaktaki asıl ifade `code` alanında duruyor.
 - **D13. Component ve kullanımlar:**
   - Component olarak sayılanlar:
@@ -162,7 +160,11 @@ FR-21 kod panelinin "ilgili satır vurgulu" açılmasını istiyor. Bir kenar (�
     - `memo`/`forwardRef` vb. sarmalayıcıya verilen satır içi fonksiyon;
     - adsız varsayılan export (adı dosyadan geliyor).
   - Component anahtarı `dosya#bildirimAdı`.
-  - Projedeki `useX` hook'ları çağrıldıkları yerde component'e açılıyor. Hook'tan gelen kullanımın satırı, component'teki çağrı satırı.
+  - Kullanım iki biçimde: doğrudan çağrı (`await searchSubContracts(req)`, via `DIRECT`) ya da React Query hook'u
+    içinden (via `REACT_QUERY`).
+  - Projedeki `useX` hook'ları (ör. `src/shared/hooks` altındaki `useQuery` sarmalayıcıları) çağrıldıkları yerde
+    component'e açılıyor. Kullanımın `hook` alanı zinciri tutuyor (`useSubContractPaymentPlan > useQuery`); satırı
+    component'teki çağrı satırı.
   - Aynı ApiCall aynı yolla (via/hook) birden çok kez kullanılırsa tek kullanım sayılıyor.
   - Route `element`'i sarmalayıcı içeriyorsa (`<Suspense>`, `<RequireAuth>`) en içteki proje component'i ekran oluyor.
   - Path'siz layout route'ları ekran sayılmıyor.

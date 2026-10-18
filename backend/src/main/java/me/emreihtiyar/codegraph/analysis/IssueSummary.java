@@ -7,8 +7,8 @@ import java.util.Map;
 import me.emreihtiyar.codegraph.extract.model.ParseIssue;
 
 /**
- * Bir reponun sorunlarını türe göre gruplayıp log için özetler: {@code 270× ApiCall adayı '…' içinde HTTP çağrısı
- * bulunamadı (ör. src/api/xApiCalls.ts:12 …)}. Tür, mesajdaki tırnaklı adlar ve ayrıntılar atılarak bulunur.
+ * Bir reponun sorunlarını türe göre gruplayıp log için özetler: {@code 12× Sözdizimi hatası (ör. src/A.tsx:3 …)}.
+ * Tür, mesajdaki tırnaklı adlar ve ayrıntılar atılarak bulunur.
  */
 final class IssueSummary {
 
@@ -40,7 +40,7 @@ final class IssueSummary {
         return message.length() > 300 ? message.substring(0, 300) + "…" : message;
     }
 
-    /** {@code ApiCall adayı 'x' içinde ...; gövdedeki çağrılar: ...} → {@code ApiCall adayı '…' içinde ...}. */
+    /** {@code ApiCall 'getX': callApi çağrısında 'endpoint' ...} → {@code ApiCall '…': callApi çağrısında '…' ...}. */
     static String kind(String message) {
         String kind = message.replaceAll("'[^']*'", "'…'");
         int cut = kind.indexOf(';');

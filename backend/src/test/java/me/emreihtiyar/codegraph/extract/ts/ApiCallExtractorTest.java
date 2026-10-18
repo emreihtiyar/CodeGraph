@@ -11,7 +11,7 @@ import me.emreihtiyar.codegraph.extract.model.HttpMethod;
 import me.emreihtiyar.codegraph.extract.model.ParseIssue;
 import org.junit.jupiter.api.Test;
 
-/** Fixture dışı ApiCalls kalıpları: sınıflar, bilinmeyen istemciler ve teşhis mesajları. */
+/** {@code callApi({ endpoint, method })} kalıbının ayrıntıları; fixture'daki genel akış FrontendRepoAnalyzerTest'te. */
 class ApiCallExtractorTest {
 
     private static JsModule module(String path, String source) {
@@ -27,76 +27,98 @@ class ApiCallExtractorTest {
     }
 
     @Test
-    void classMethodsAndDefaultInstanceAreApiCalls() {
-        JsModule api = module("src/api/contractApiCalls.ts", """
-                import { http } from '@company/http';
-                class ContractApiCalls {
-                  private base = '/leasing-contract-bff';
-                  getContract(id: string) { return http.get(`/leasing-contract-bff/contracts/${id}`); }
-                  saveContract = async (body: any) => http.post('/leasing-contract-bff/contracts', body);
+    void featureApiCallsFile() {
+        JsModule api = module("src/features/subContractQuery/api/ApiCalls.ts", """
+                import { callApi } from "@/shared/api/callApi";
+
+                export function getBaseUrl(): string {
+                  return "leasing-contract-bff";
                 }
-                export default new ContractApiCalls();
-                """);
 
-        assertThat(extract(api).values())
-                .extracting(ApiCallFact::key, ApiCallFact::httpMethod, ApiCallFact::targetPrefix, ApiCallFact::normalizedPath)
-                .containsExactlyInAnyOrder(
-                        tuple("src/api/contractApiCalls.ts#ContractApiCalls.getContract", HttpMethod.GET,
-                                "leasing-contract-bff", "/contracts/{*}"),
-                        tuple("src/api/contractApiCalls.ts#ContractApiCalls.saveContract", HttpMethod.POST,
-                                "leasing-contract-bff", "/contracts"));
-        assertThat(issues).isEmpty();
-    }
-
-    @Test
-    void componentCallOnDefaultInstanceResolvesToClassMethod() {
-        JsModule api = module("src/api/contractApiCalls.ts", """
-                export class ContractApiCalls {
-                  static list() { return fetch('/leasing-contract-bff/contracts'); }
+                export function getSubContractQueryInitialData(): Promise<any> {
+                  return callApi({
+                    endpoint: getBaseUrl() + "/api/sub-contract-query/page-load",
+                    method: "GET",
+                    notifyErrors: false,
+                  });
                 }
-                """);
-        JsModule screen = module("src/Screen.tsx", """
-                import { ContractApiCalls } from './api/contractApiCalls';
-                export const load = () => ContractApiCalls.list();
-                """);
-        JsProject project = new JsProject(List.of(api, screen), PathAliases.none());
-        Js.Node callee = ((Js.Call) ((Js.Return) ((Js.Func) ((Js.VarDecl) screen.declarations().get("load")).init())
-                .body().get(0)).value()).callee();
 
-        assertThat(project.resolve(screen, callee)).map(JsProject.Symbol::key)
-                .contains("src/api/contractApiCalls.ts#ContractApiCalls.list");
-    }
+                export function getContractStatusesByMainStatuses(
+                  mainContractStatuses?: string[],
+                ): Promise<{ contractStatuses: SelectOption[] }> {
+                  return callApi({
+                    endpoint:
+                      getBaseUrl() +
+                      "/api/sub-contract-query/contract-statuses",
+                    method: "POST",
+                    notifyErrors: false,
+                    body: {
+                      mainContractStatuses: mainContractStatuses ?? [],
+                    },
+                  });
+                }
 
-    @Test
-    void unknownClientWithUrlLikeArgumentIsUsedAsLastResort() {
-        JsModule api = module("src/api/purchaseApiCalls.ts", """
-                import { callService } from '@company/core';
-                export const listOrders = (q: any) => callService({ url: '/leasing-purchasing-bff/orders', method: 'POST', data: q });
-                export const getOrder = (id: string) => httpGetRequest(`/leasing-purchasing-bff/orders/${id}`);
+                export function getSubContractViewPaymentPlan(subContractId: number): Promise<any> {
+                  return callApi({
+                    endpoint:
+                      getBaseUrl() + `/api/sub-contract-view/${subContractId}/payment-plan`,
+                    method: "GET",
+                    notifyErrors: false,
+                  });
+                }
+
+                export function approveSubContract(id: number, description: string) {
+                  const text = encodeURIComponent(description);
+                  return callApi({ endpoint: getBaseUrl() + `/api/sub-contract/${id}/approve?description=${text}`, method: "PUT" });
+                }
                 """);
 
         assertThat(extract(api).values())
                 .extracting(ApiCallFact::name, ApiCallFact::httpMethod, ApiCallFact::targetPrefix, ApiCallFact::normalizedPath)
-                .containsExactlyInAnyOrder(
-                        tuple("listOrders", HttpMethod.POST, "leasing-purchasing-bff", "/orders"),
-                        tuple("getOrder", HttpMethod.GET, "leasing-purchasing-bff", "/orders/{*}"));
+                .containsExactly(
+                        tuple("getSubContractQueryInitialData", HttpMethod.GET, "leasing-contract-bff",
+                                "/api/sub-contract-query/page-load"),
+                        tuple("getContractStatusesByMainStatuses", HttpMethod.POST, "leasing-contract-bff",
+                                "/api/sub-contract-query/contract-statuses"),
+                        tuple("getSubContractViewPaymentPlan", HttpMethod.GET, "leasing-contract-bff",
+                                "/api/sub-contract-view/{*}/payment-plan"),
+                        tuple("approveSubContract", HttpMethod.PUT, "leasing-contract-bff", "/api/sub-contract/{*}/approve"));
+        assertThat(issues).isEmpty();
     }
 
     @Test
-    void missingHttpCallIssueListsTheCallsInTheBody() {
-        JsModule api = module("src/api/miscApiCalls.ts", """
-                import { ServiceCaller } from '@company/core';
-                export const getLimits = (req: any) => ServiceCaller.call({ serviceName: 'LEASING.NGLA.x-bff', operation: 'getLimits', req });
+    void baseUrlFromAnotherModuleAndMethodVariants() {
+        JsModule constants = module("src/shared/constants.ts", """
+                export const CONTRACT_BFF = "/leasing-contract-bff";
+                export enum HttpMethod { GET = "GET", POST = "POST" }
+                """);
+        JsModule api = module("src/features/x/api/XApiCalls.ts", """
+                import { CONTRACT_BFF, HttpMethod } from "../../../shared/constants";
+                const LIST = CONTRACT_BFF + "/api/contracts";
+
+                export const listContracts = () => callApi({ endpoint: LIST });
+                export const saveContract = (body: any) => callApi({ endpoint: LIST, method: HttpMethod.POST, body });
+                export const send = (method: string) => callApi({ endpoint: `${CONTRACT_BFF}/api/send`, method });
+                """);
+
+        assertThat(extract(api, constants).values())
+                .extracting(ApiCallFact::name, ApiCallFact::httpMethod, ApiCallFact::targetPrefix, ApiCallFact::normalizedPath)
+                .containsExactly(
+                        tuple("listContracts", HttpMethod.GET, "leasing-contract-bff", "/api/contracts"),
+                        tuple("saveContract", HttpMethod.POST, "leasing-contract-bff", "/api/contracts"),
+                        tuple("send", HttpMethod.ANY, "leasing-contract-bff", "/api/send"));
+    }
+
+    @Test
+    void onlyCallApiCountsAndMissingEndpointIsReported() {
+        JsModule api = module("src/features/x/api/ApiCalls.ts", """
+                export const viaFetch = () => fetch("/leasing-contract-bff/api/x");
+                export const viaAxios = () => axios.get("/leasing-contract-bff/api/y");
+                export const withOptions = (options: any) => callApi(options);
                 """);
 
         assertThat(extract(api)).isEmpty();
         assertThat(issues).singleElement().extracting(ParseIssue::message).asString()
-                .contains("'getLimits' içinde HTTP çağrısı bulunamadı")
-                .contains("ServiceCaller.call({serviceName, operation, req})");
-    }
-
-    @Test
-    void shebangLineIsIgnored() {
-        assertThat(TsSourceParser.parse("#!/usr/bin/env node\nconst a = 1;\n", false).errors()).isEmpty();
+                .contains("'withOptions'").contains("'endpoint' bulunamadı");
     }
 }

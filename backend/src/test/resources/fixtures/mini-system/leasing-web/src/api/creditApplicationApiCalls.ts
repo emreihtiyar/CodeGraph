@@ -1,7 +1,8 @@
-import { GATEWAY_URL } from '../config';
-import { buildUrl } from './urlUtils';
+import { callApi } from './callApi';
 
-const BFF = `${GATEWAY_URL}/leasing-credit-bff`;
+export function getBaseUrl(): string {
+  return "leasing-credit-bff";
+}
 
 export interface CreditApplicationRequest {
   customerId: number;
@@ -9,19 +10,23 @@ export interface CreditApplicationRequest {
   amount: number;
 }
 
-export const getCreditApplication = async (applicationId: string) => {
-  const response = await fetch(`${BFF}/applications/${applicationId}`);
-  return response.json();
-};
-
-export const createCreditApplication = async (body: CreditApplicationRequest) => {
-  const response = await fetch(`${BFF}/applications`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+export function getCreditApplication(applicationId: string): Promise<any> {
+  return callApi({
+    endpoint: getBaseUrl() + `/applications/${applicationId}`,
+    method: "GET",
+    notifyErrors: false,
   });
-  return response.json();
-};
+}
 
-// URL yardımcı fonksiyonla dinamik üretiliyor: UNRESOLVED olmalı.
-export const getApplicationDocument = (path: string) => fetch(buildUrl(path)).then((r) => r.blob());
+export const createCreditApplication = (body: CreditApplicationRequest) =>
+  callApi({
+    endpoint: getBaseUrl() + "/applications",
+    method: "POST",
+    notifyErrors: false,
+    body,
+  });
+
+// Endpoint dışarıdan geliyor: hedef çözülemez, UNRESOLVED olmalı.
+export function getApplicationDocument(path: string): Promise<any> {
+  return callApi({ endpoint: path, method: "GET" });
+}

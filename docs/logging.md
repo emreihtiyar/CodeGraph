@@ -3,9 +3,9 @@
 Her analizde INFO seviyesinde repo başına bir özet satırı, sorunların türe göre özeti ve bağlama sonuçları yazılır:
 
 ```
-purchasing-ui: 312 dosya, 140 component, 38 ekran, 0 ApiCall, 0 ApiCall kullanımı, 285 sorun (36930 ms)
-purchasing-ui: sorun özeti: 285× ApiCall adayı '…' içinde HTTP çağrısı bulunamadı (ör. src/api/xApiCalls.ts:12 …; gövdedeki çağrılar: ServiceCaller.call({serviceName, path}))
-ApiCall bağları: 120 çözüldü, 3 belirsiz, 14 çözülemedi
+purchasing-ui: 312 dosya, 140 component, 38 ekran, 285 ApiCall, 190 ApiCall kullanımı, 2 sorun (36930 ms)
+purchasing-ui: sorun özeti: 2× ApiCall '…': callApi çağrısında '…' bulunamadı (ör. src/features/x/api/ApiCalls.ts:12 …)
+ApiCall bağları: 270 çözüldü, 3 belirsiz, 12 çözülemedi
 ```
 
 Sorunların tam listesi arayüzde **Analiz** ekranındadır.
@@ -17,7 +17,7 @@ Paket bazında seviye verilir; `DEBUG` yeterli, `TRACE` dosya dosya ayrıntı da
 | Logger | Ne yazar |
 |---|---|
 | `me.emreihtiyar.codegraph` | her şey |
-| `me.emreihtiyar.codegraph.extract.ts` | UI analizi: taranan dosyalar, tsconfig takma adları, çözülemeyen import'lar, her ApiCall adayı (bulunan URL ve hedef BFF ya da neden bulunamadığı), component/ekran sayıları, her ekranın route'u |
+| `me.emreihtiyar.codegraph.extract.ts` | UI analizi: taranan dosyalar, tsconfig takma adları, çözülemeyen import'lar, her ApiCall (endpoint, metot, hedef BFF), `callApi` çağırmadığı için atlanan export'lar, component/ekran sayıları, her ekranın route'u |
 | `me.emreihtiyar.codegraph.link` | BFF gateway prefix tablosu, her ApiCall/Feign bağının sonucu ve nedeni |
 | `me.emreihtiyar.codegraph.analysis` | her sorunun tek tek listesi |
 
@@ -49,12 +49,12 @@ $env:LOGGING_LEVEL_ME_EMREIHTIYAR_CODEGRAPH = "DEBUG"
 
 ## UI hiç ApiCall bulamıyorsa
 
-1. Özet satırında `0 ApiCall` ve `HTTP çağrısı bulunamadı` sorunları varsa sorundaki **gövdedeki çağrılar**
-   kısmı ApiCalls dosyalarının hangi istemciyi kullandığını gösterir. Desteklenenler: `fetch`, `axios` ve
-   `axios.create` örnekleri, `x.get('/yol')` gibi istemciler, proje içi yardımcı fonksiyonlar (3 seviyeye kadar
-   içine girilir) ve son çare olarak URL'ye benzeyen (`/` ya da `http` ile başlayan, ortam değişkeniyle başlayan)
-   argüman. Bunların dışındaki bir kalıp için o çağrının bir örneğini paylaşın.
-2. `adı 'ApiCalls' içeren ... dosyası yok` uyarısı varsa dosya adları farklıdır.
-3. `export ... ApiCall adayı sayılmadı` DEBUG satırları export'un fonksiyon, nesne veya sınıf olmadığını gösterir.
+ApiCall, ApiCalls dosyasının export ettiği ve `callApi({ endpoint, method })` çağıran fonksiyondur.
+
+1. `adı 'ApiCalls' içeren ... dosyası yok` uyarısı varsa dosya adları farklıdır.
+2. `... callApi çağırmıyor, ApiCall sayılmadı; çağrılar: ...` DEBUG satırları atlanan export'ları ve gövdelerindeki
+   çağrıları gösterir (`getBaseUrl` gibi yardımcılar için normaldir).
+3. `callApi çağrısında 'endpoint' bulunamadı` sorunu, `callApi`'ye nesne literali yerine çözülemeyen bir değişken
+   verildiğini gösterir.
 4. ApiCall'lar bulunuyor ama bağlanmıyorsa `me.emreihtiyar.codegraph.link` DEBUG'ı hedef prefix'i ve BFF
    tablosunu yan yana gösterir; uyuşmuyorsa repos dosyasında BFF'e `gateway-prefix` verin.

@@ -132,7 +132,7 @@ class LinkerTest {
     }
 
     private static ApiCallFact apiCall(String key, String prefix) {
-        return new ApiCallFact(key, key, HttpMethod.GET, "{gateway}/" + prefix + "/api/contracts/{*}",
+        return new ApiCallFact(key, key, HttpMethod.GET, prefix + "/api/contracts/{*}",
                 "/api/contracts/{*}", prefix, null, "");
     }
 

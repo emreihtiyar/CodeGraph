@@ -73,6 +73,11 @@ class TsSourceParserTest {
     }
 
     @Test
+    void shebangLineIsIgnored() {
+        assertThat(TsSourceParser.parse("#!/usr/bin/env node\nconst a = 1;\n", false).errors()).isEmpty();
+    }
+
+    @Test
     void realWorldSmoke() {
         String dir = System.getProperty("realworld");
         if (dir == null) {

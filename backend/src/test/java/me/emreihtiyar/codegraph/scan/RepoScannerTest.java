@@ -40,7 +40,8 @@ class RepoScannerTest {
         assertThat(paths(scanned.apiCallFiles()))
                 .containsExactly("src/api/creditApplicationApiCalls.ts", "src/api/scoringApiCalls.js");
         assertThat(paths(scanned.frontendSources()))
-                .contains("src/routes.tsx", "src/components/ScoreBadge.tsx", "src/api/urlUtils.ts")
+                .contains("src/routes.tsx", "src/components/ScoreBadge.tsx", "src/api/callApi.ts",
+                        "src/shared/hooks/useScoring.ts")
                 .doesNotContain("src/components/ScoreBadge.test.tsx");
         assertThat(scanned.javaSources()).isEmpty();
     }

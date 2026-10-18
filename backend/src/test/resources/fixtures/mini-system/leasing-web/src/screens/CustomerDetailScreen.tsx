@@ -14,8 +14,9 @@ export default function CustomerDetailScreen() {
     ],
   });
 
-  const showHistory = () => {
-    getScoreHistory(id).then((history) => console.log(history));
+  const showHistory = async () => {
+    const history = await getScoreHistory(id);
+    console.log(history);
   };
 
   return (

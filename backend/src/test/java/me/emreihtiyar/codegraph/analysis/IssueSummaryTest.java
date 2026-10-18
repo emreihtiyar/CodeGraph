@@ -12,12 +12,12 @@ class IssueSummaryTest {
     void groupsByKindMostFrequentFirst() {
         List<String> lines = IssueSummary.of(List.of(
                 new ParseIssue("a.ts", 3, "Sözdizimi hatası: 3:1 extraneous input"),
-                new ParseIssue("xApiCalls.ts", 5, "ApiCall adayı 'getA' içinde HTTP çağrısı bulunamadı; gövdedeki çağrılar: f()"),
-                new ParseIssue("xApiCalls.ts", 9, "ApiCall adayı 'getB' içinde HTTP çağrısı bulunamadı; gövdedeki çağrılar: g()")));
+                new ParseIssue("ApiCalls.ts", 5, "ApiCall 'getA': callApi çağrısında 'endpoint' bulunamadı"),
+                new ParseIssue("ApiCalls.ts", 9, "ApiCall 'getB': callApi çağrısında 'endpoint' bulunamadı")));
 
         assertThat(lines).containsExactly(
-                "2× ApiCall adayı '…' içinde HTTP çağrısı bulunamadı (ör. xApiCalls.ts:5 ApiCall adayı 'getA' içinde "
-                        + "HTTP çağrısı bulunamadı; gövdedeki çağrılar: f())",
+                "2× ApiCall '…': callApi çağrısında '…' bulunamadı (ör. ApiCalls.ts:5 ApiCall 'getA': callApi "
+                        + "çağrısında 'endpoint' bulunamadı)",
                 "1× Sözdizimi hatası (ör. a.ts:3 Sözdizimi hatası: 3:1 extraneous input)");
     }
 }

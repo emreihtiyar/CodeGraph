@@ -46,6 +46,9 @@ leasing-web (FRONTEND)
 
 ## ApiCall → BFF Endpoint
 
+ApiCall'lar `callApi({ endpoint: getBaseUrl() + "/path", method })` kalıbındadır; `getBaseUrl()` BFF'in gateway
+prefix'ini döndürür ve kendisi ApiCall değildir.
+
 | ApiCall (dosya)                                       | Metot | Hedef                                   |
 |-------------------------------------------------------|-------|-----------------------------------------|
 | getCreditApplication (creditApplicationApiCalls.ts)   | GET   | leasing-credit-bff GET /applications/{*} |
@@ -60,9 +63,9 @@ leasing-web (FRONTEND)
 | Route                   | Ekran component'i       | RENDERS                       | ApiCall kullanımı (sıra, via/hook) |
 |-------------------------|-------------------------|-------------------------------|------------------------------------|
 | /credit-application     | CreditApplicationScreen | ScoreBadge, ApplicationForm   | 1 getCreditApplication (REACT_QUERY/useQuery) |
-| /customers/:customerId  | CustomerDetailScreen    | ScoreBadge                    | 1 getScore, 2 getCustomerSummary (REACT_QUERY/useQueries), 3 getScoreHistory (FETCH) |
+| /customers/:customerId  | CustomerDetailScreen    | ScoreBadge                    | 1 getScore, 2 getCustomerSummary (REACT_QUERY/useQueries), 3 getScoreHistory (DIRECT, `await` ile) |
 | —                       | ApplicationForm         | —                             | 1 createCreditApplication (REACT_QUERY/useMutation) |
-| —                       | ScoreBadge              | —                             | 1 getScore (REACT_QUERY/useQuery) |
+| —                       | ScoreBadge              | —                             | 1 getScore (REACT_QUERY/`useScore > useQuery`: `shared/hooks` altındaki özel hook) |
 
 `ScoreBadge.test.tsx` ve `credit-api/src/test/**` analiz dışıdır.
 
