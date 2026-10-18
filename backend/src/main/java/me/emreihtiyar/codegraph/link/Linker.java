@@ -14,6 +14,8 @@ import me.emreihtiyar.codegraph.extract.model.FeignMethodFact;
 import me.emreihtiyar.codegraph.extract.model.HttpMethod;
 import me.emreihtiyar.codegraph.extract.model.RepoFacts;
 import me.emreihtiyar.codegraph.extract.model.Resolution;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -31,6 +33,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class Linker {
+
+    private static final Logger log = LoggerFactory.getLogger(Linker.class);
 
     /** @param aliases repo adı → yapılandırmadaki Feign adı eşlemeleri ({@code aliases}) */
     public LinkResult link(List<RepoFacts> repos, Map<String, List<String>> aliases) {
@@ -58,7 +62,27 @@ public class Linker {
                 aliases.getOrDefault(repo.repoName(), List.of()).forEach(a -> bffsByPrefix.putIfAbsent(lower(a), repo));
             }
         }
-        return new LinkResult(linkApiCalls(repos, bffsByPrefix), linkFeign(repos, services));
+        log.debug("BFF gateway prefix'leri: {}", bffsByPrefix.entrySet().stream()
+                .map(e -> e.getKey() + " → " + e.getValue().repoName()).toList());
+        LinkResult result = new LinkResult(linkApiCalls(repos, bffsByPrefix), linkFeign(repos, services));
+        logLinks("ApiCall", result.apiCalls());
+        logLinks("Feign", result.feignMethods());
+        return result;
+    }
+
+    private static void logLinks(String kind, List<LinkResult.Link> links) {
+        Map<Resolution, Long> counts = new java.util.EnumMap<>(Resolution.class);
+        links.forEach(l -> counts.merge(l.resolution(), 1L, Long::sum));
+        log.info("{} bağları: {} çözüldü, {} belirsiz, {} çözülemedi", kind, counts.getOrDefault(Resolution.RESOLVED, 0L),
+                counts.getOrDefault(Resolution.AMBIGUOUS, 0L), counts.getOrDefault(Resolution.UNRESOLVED, 0L));
+        if (log.isDebugEnabled()) {
+            for (LinkResult.Link l : links) {
+                log.debug("{} {} [{}] {} → {}{}", kind, l.sourceKey(), l.repo(), l.resolution(),
+                        l.targets().isEmpty() ? l.targetService() : l.targets().stream()
+                                .map(t -> t.service() + " " + t.httpMethod() + " " + t.normalizedPath()).toList(),
+                        l.reason() == null ? "" : " (" + l.reason() + ")");
+            }
+        }
     }
 
     private static List<LinkResult.Link> linkApiCalls(List<RepoFacts> repos, Map<String, RepoFacts> bffsByPrefix) {

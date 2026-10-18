@@ -75,6 +75,11 @@ public final class JsProject {
         return Optional.ofNullable(modules.get(path));
     }
 
+    /** Belirteç proje içini mi gösteriyor (göreli yol veya tsconfig takma adı); harici paketlerde false. */
+    public boolean isInternal(String specifier) {
+        return specifier != null && (specifier.startsWith(".") || aliases.matchesPattern(specifier));
+    }
+
     /** Import belirtecini projedeki modüle çözer; harici paketlerde boş döner. */
     public Optional<JsModule> resolveModule(JsModule from, String specifier) {
         if (specifier == null) {
@@ -272,14 +277,37 @@ public final class JsProject {
             if (o.isNamespace()) {
                 return resolveExport(o.module(), m.property());
             }
-            if (o.value() instanceof Obj obj) {
-                for (Prop p : obj.props()) {
-                    if (m.property().equals(p.key())) {
-                        return Optional.of(new Symbol(o.module(), o.name() + "." + p.key(), p.value()));
-                    }
+            return Optional.ofNullable(members(o).get(m.property()));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Bir sembolün üyeleri, ad → sembol: nesne literalinin özellikleri ({@code nesne.özellik}), sınıfın metot ve
+     * özellikleri ya da sınıf örneğinin ({@code export default new XApiCalls()}) sınıf üyeleri ({@code Sınıf.metot}).
+     */
+    public Map<String, Symbol> members(Symbol owner) {
+        Map<String, Symbol> out = new LinkedHashMap<>();
+        Node value = owner.value();
+        if (value instanceof Obj obj) {
+            for (Prop p : obj.props()) {
+                if (p.key() != null) {
+                    out.putIfAbsent(p.key(), new Symbol(owner.module(), owner.name() + "." + p.key(), p.value()));
+                }
+            }
+            return out;
+        }
+        Symbol type = value instanceof Js.New n ? resolve(owner.module(), n.callee()).orElse(null) : owner;
+        if (type != null && type.value() instanceof Js.ClassNode c) {
+            String prefix = c.name() != null ? c.name() : type.name();
+            for (Node member : c.members()) {
+                if (member instanceof Func f && f.name() != null && !f.name().equals("constructor")) {
+                    out.putIfAbsent(f.name(), new Symbol(type.module(), prefix + "." + f.name(), f));
+                } else if (member instanceof VarDecl v && v.target().name() != null) {
+                    out.putIfAbsent(v.target().name(), new Symbol(type.module(), prefix + "." + v.target().name(), v));
                 }
             }
         }
-        return Optional.empty();
+        return out;
     }
 }

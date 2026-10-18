@@ -33,3 +33,12 @@ codegraph:
     endpoint: /mcp
     # Tarayıcıdan gelen isteklerde kabul edilen Origin'ler (DNS rebinding koruması); Origin'siz istemciler serbest.
     allowed-origins: ["http://localhost:*", "http://127.0.0.1:*"]
+
+# Ayrıntılı analiz logu (docs/logging.md). Yorumu kaldır ya da çalıştırırken ver:
+#   --logging.level.me.emreihtiyar.codegraph=DEBUG
+# logging:
+#   level:
+#     me.emreihtiyar.codegraph: DEBUG                    # tüm analiz (UI, Java, bağlama)
+#     me.emreihtiyar.codegraph.extract.ts: TRACE         # yalnızca UI analizi, dosya dosya
+#   file:
+#     name: ./.codegraph/codegraph.log                   # konsolla birlikte dosyaya da yaz

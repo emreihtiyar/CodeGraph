@@ -114,6 +114,15 @@ public final class PathAliases {
 
     /** Belirteç için denenecek repo içi yollar (uzantısız olabilir). */
     public List<String> resolve(String specifier) {
+        return resolve(specifier, true);
+    }
+
+    /** Belirteç bir {@code paths} kalıbına (ya da varsayılan {@code @/}, {@code ~/}) uyuyor mu; baseUrl sayılmaz. */
+    public boolean matchesPattern(String specifier) {
+        return !resolve(specifier, false).isEmpty();
+    }
+
+    private List<String> resolve(String specifier, boolean withBaseUrl) {
         List<String> out = new ArrayList<>();
         for (var entry : paths.entrySet()) {
             String pattern = entry.getKey();
@@ -132,7 +141,7 @@ public final class PathAliases {
                 entry.getValue().forEach(t -> out.add(t.replace("*", matched)));
             }
         }
-        if (baseUrl != null) {
+        if (withBaseUrl && baseUrl != null) {
             out.add(baseUrl.isEmpty() ? specifier : baseUrl + "/" + specifier);
         }
         if (out.isEmpty()) {
@@ -141,5 +150,10 @@ public final class PathAliases {
             }
         }
         return out;
+    }
+
+    @Override
+    public String toString() {
+        return "paths=" + paths + ", baseUrl=" + (baseUrl == null ? "yok" : "'" + baseUrl + "'");
     }
 }

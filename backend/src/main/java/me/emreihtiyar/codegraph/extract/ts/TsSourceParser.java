@@ -28,6 +28,9 @@ public final class TsSourceParser {
 
     /** @param jsx JSX etkin mi ({@code .tsx}, {@code .jsx}, {@code .js}); {@code .ts}'de kapalı */
     public static Result parse(String source, boolean jsx) {
+        if (source.startsWith("#!")) {
+            source = "//" + source.substring(2); // Node betiklerindeki shebang satırı
+        }
         try {
             return parse(source, jsx, PredictionMode.SLL, true);
         } catch (ParseCancellationException e) {

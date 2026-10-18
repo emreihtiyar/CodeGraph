@@ -18,17 +18,19 @@ import me.emreihtiyar.codegraph.extract.ts.Js.Ident;
 import me.emreihtiyar.codegraph.extract.ts.Js.Member;
 import me.emreihtiyar.codegraph.extract.ts.Js.Node;
 import me.emreihtiyar.codegraph.extract.ts.Js.Obj;
-import me.emreihtiyar.codegraph.extract.ts.Js.Prop;
 import me.emreihtiyar.codegraph.extract.ts.Js.VarDecl;
 import me.emreihtiyar.codegraph.extract.ts.JsProject.Symbol;
 import me.emreihtiyar.codegraph.extract.ts.UrlEvaluator.Part;
 import me.emreihtiyar.codegraph.extract.ts.UrlEvaluator.Scope;
 import me.emreihtiyar.codegraph.extract.ts.UrlEvaluator.Target;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * ApiCalls dosyalarındaki endpoint tanımları (PRD FR-07). Dosyanın export ettiği her fonksiyon (veya export edilen
- * nesne literalindeki her fonksiyon özelliği, ör. {@code export const api = { getX: () => ... }}) bir ApiCall
- * adayıdır; gövdesindeki ilk HTTP çağrısı aranır:
+ * ApiCalls dosyalarındaki endpoint tanımları (PRD FR-07). Dosyanın export ettiği her fonksiyon, export edilen nesne
+ * literalindeki her fonksiyon özelliği ({@code export const api = { getX: () => ... }}) ve export edilen sınıfın (veya
+ * {@code export default new XApiCalls()} örneğinin) metotları bir ApiCall adayıdır; gövdesindeki ilk HTTP çağrısı
+ * aranır:
  * <ul>
  *   <li>{@code fetch(url, { method })} — metot verilmezse GET,</li>
  *   <li>{@code axios(config)}, {@code axios(url, config)}, {@code axios.get(url)} ...,</li>
@@ -37,11 +39,18 @@ import me.emreihtiyar.codegraph.extract.ts.UrlEvaluator.Target;
  *   <li>projedeki yardımcı fonksiyonlar ({@code request('POST', url)}) — argümanlar bağlanarak 3 seviyeye kadar
  *       içine girilir.</li>
  * </ul>
+ * Bunların hiçbiri yoksa son çare olarak argümanı (ya da nesne argümanının {@code url/path/endpoint} özelliği) URL'ye
+ * benzeyen ilk çağrı alınır; metot nesnenin {@code method} özelliğinden veya çağrılan adın fiilinden
+ * ({@code httpPost}, {@code postData}) çıkarılır, yoksa GET.
  */
 final class ApiCallExtractor {
 
+    private static final Logger log = LoggerFactory.getLogger(ApiCallExtractor.class);
+
     private static final Set<String> VERBS = Set.of("get", "post", "put", "patch", "delete", "head", "options");
     private static final int MAX_INLINE_DEPTH = 3;
+    private static final List<String> URL_KEYS = List.of("url", "path", "endpoint", "uri", "serviceUrl", "apiUrl");
+    private static final java.util.regex.Pattern WORDS = java.util.regex.Pattern.compile("[a-z]+|[A-Z][a-z]*");
 
     private record HttpCall(HttpMethod method, List<Part> url) {}
 
@@ -56,45 +65,69 @@ final class ApiCallExtractor {
     /** @return ApiCall sembol anahtarı → olgu */
     Map<String, ApiCallFact> extract(List<JsModule> apiCallModules, List<ParseIssue> issues) {
         Map<String, ApiCallFact> out = new LinkedHashMap<>();
+        Set<String> seen = new HashSet<>();
         for (JsModule module : apiCallModules) {
+            int before = out.size();
+            int candidateCount = 0;
             for (String exported : module.exports().keySet()) {
                 Optional<Symbol> symbol = project.resolveExport(module, exported);
-                if (symbol.isEmpty() || symbol.get().module() != module || out.containsKey(symbol.get().key())) {
-                    continue; // yeniden export edilenler kendi dosyalarında işlenir
+                if (symbol.isEmpty() || symbol.get().module() != module) {
+                    log.debug("{}: export '{}' atlandı ({})", module.path(), exported,
+                            symbol.isEmpty() ? "çözülemedi" : "başka dosyadan yeniden export, orada işlenir");
+                    continue;
                 }
-                candidates(symbol.get()).forEach(c -> analyze(c, out, issues));
+                List<Symbol> candidates = candidates(symbol.get());
+                if (candidates.isEmpty()) {
+                    log.debug("{}: export '{}' fonksiyon/nesne/sınıf değil ({}), ApiCall adayı sayılmadı", module.path(),
+                            exported, kind(symbol.get().value()));
+                }
+                for (Symbol c : candidates) {
+                    if (seen.add(c.key())) {
+                        candidateCount++;
+                        analyze(c, out, issues);
+                    }
+                }
+            }
+            log.debug("{}: {} export, {} ApiCall adayı, {} ApiCall bulundu", module.path(), module.exports().size(),
+                    candidateCount, out.size() - before);
+            if (module.exports().isEmpty()) {
+                log.debug("{}: hiç export yok; ApiCall'lar export edilen fonksiyon, nesne ya da sınıf olmalı", module.path());
             }
         }
         return out;
     }
 
-    /** Export edilen fonksiyon veya nesne literalindeki fonksiyon özellikleri. */
+    /** Export edilen fonksiyon; nesne literalinin, sınıfın veya sınıf örneğinin fonksiyon üyeleri. */
     private List<Symbol> candidates(Symbol symbol) {
-        Node value = symbol.value();
-        if (value instanceof Func) {
+        if (symbol.value() instanceof Func) {
             return List.of(symbol);
         }
-        List<Symbol> out = new ArrayList<>();
-        if (value instanceof Obj obj) {
-            for (Prop p : obj.props()) {
-                if (p.key() != null && p.value() instanceof Func) {
-                    out.add(new Symbol(symbol.module(), symbol.name() + "." + p.key(), p.value()));
-                }
-            }
-        }
-        return out;
+        return project.members(symbol).values().stream().filter(s -> s.value() instanceof Func).toList();
     }
 
     private void analyze(Symbol symbol, Map<String, ApiCallFact> out, List<ParseIssue> issues) {
         Func f = (Func) symbol.value();
         JsModule module = symbol.module();
-        HttpCall call = find(f, Scope.function(module, f, List.of()), 0, new HashSet<>());
+        Scope scope = Scope.function(module, f, List.of());
+        HttpCall call = find(f, scope, 0, new HashSet<>());
         if (call == null) {
-            issues.add(new ParseIssue(module.path(), f.line(),
-                    "ApiCall adayı '" + symbol.name() + "' içinde HTTP çağrısı bulunamadı"));
+            call = findLoose(f, scope);
+            if (call != null) {
+                log.debug("{}: '{}' bilinen bir HTTP istemcisi kullanmıyor; URL'ye benzeyen argümandan çıkarıldı",
+                        module.path(), symbol.name());
+            }
+        }
+        if (call == null) {
+            String calls = describeCalls(f);
+            issues.add(new ParseIssue(module.path(), f.line(), "ApiCall adayı '" + symbol.name()
+                    + "' içinde HTTP çağrısı bulunamadı; gövdedeki çağrılar: " + (calls.isEmpty() ? "yok" : calls)));
+            log.debug("{}:{} '{}' içinde HTTP çağrısı yok; çağrılar: {}", module.path(), f.line(), symbol.name(), calls);
             return;
         }
         Optional<Target> target = UrlEvaluator.target(call.url());
+        log.debug("{}:{} ApiCall '{}' → {} {} (hedef prefix: {}, path: {})", module.path(), f.line(), symbol.name(),
+                call.method(), UrlEvaluator.render(call.url()), target.map(Target::targetPrefix).orElse("çözülemedi"),
+                target.map(Target::normalizedPath).orElse("-"));
         int start = startLine(symbol);
         out.put(symbol.key(), new ApiCallFact(
                 symbol.key(),
@@ -194,6 +227,99 @@ final class ApiCallExtractor {
             return http;
         }
         return null;
+    }
+
+    // ---- son çare: URL'ye benzeyen argüman ----
+
+    /** Bilinen istemci yoksa: argümanı ya da nesne argümanının URL özelliği URL'ye benzeyen ilk çağrı. */
+    private HttpCall findLoose(Func f, Scope scope) {
+        List<Call> calls = new ArrayList<>();
+        f.body().forEach(statement -> Js.walk(statement, n -> {
+            if (n instanceof Call c) {
+                calls.add(c);
+            }
+        }));
+        for (Call c : calls) {
+            for (Node arg : c.args()) {
+                Optional<Obj> config = evaluator.objectLiteral(arg, scope);
+                List<Part> url = config.isPresent() ? urlProperty(config.get(), scope) : evaluator.eval(arg, scope);
+                if (url != null && UrlEvaluator.looksLikeUrl(url)) {
+                    return new HttpCall(looseMethod(c, scope), url);
+                }
+            }
+        }
+        return null;
+    }
+
+    private List<Part> urlProperty(Obj config, Scope scope) {
+        for (String key : URL_KEYS) {
+            Optional<Node> value = evaluator.property(config, key, scope);
+            if (value.isPresent()) {
+                return evaluator.eval(value.get(), scope);
+            }
+        }
+        return null;
+    }
+
+    /** Nesne argümanındaki {@code method}, yoksa çağrılan adın fiili ({@code httpPost} → POST), yoksa GET. */
+    private HttpMethod looseMethod(Call call, Scope scope) {
+        for (Node arg : call.args()) {
+            if (evaluator.objectLiteral(arg, scope).flatMap(o -> evaluator.property(o, "method", scope)).isPresent()) {
+                return methodOf(arg, scope, HttpMethod.GET);
+            }
+        }
+        String name = Js.calleeName(call);
+        if (name != null) {
+            var words = WORDS.matcher(name);
+            while (words.find()) {
+                String word = words.group().toLowerCase(Locale.ROOT);
+                if (VERBS.contains(word)) {
+                    return HttpMethod.valueOf(word.toUpperCase(Locale.ROOT));
+                }
+            }
+        }
+        return HttpMethod.GET;
+    }
+
+    // ---- teşhis ----
+
+    /** Gövdedeki ilk birkaç çağrı, ör. {@code ServiceCaller.call({serviceName, path}), r.json()}. */
+    static String describeCalls(Func f) {
+        Set<String> out = new java.util.LinkedHashSet<>();
+        f.body().forEach(statement -> Js.walk(statement, n -> {
+            if (n instanceof Call c && out.size() < 5) {
+                String callee = Js.dottedName(c.callee());
+                if (callee == null) {
+                    callee = c.callee() instanceof Member m && m.property() != null ? "…." + m.property() : "…";
+                }
+                out.add(callee + "(" + String.join(", ", c.args().stream().limit(3).map(ApiCallExtractor::brief).toList())
+                        + (c.args().size() > 3 ? ", …" : "") + ")");
+            }
+        }));
+        return String.join(", ", out);
+    }
+
+    private static String brief(Node node) {
+        if (node instanceof Js.Str s) {
+            return "'" + (s.value().length() > 40 ? s.value().substring(0, 40) + "…" : s.value()) + "'";
+        }
+        if (node instanceof Js.Template) {
+            return "`…`";
+        }
+        if (node instanceof Obj o) {
+            return "{" + String.join(", ", o.props().stream().limit(6)
+                    .map(p -> p.spread() ? "..." : p.key() == null ? "[…]" : p.key()).toList())
+                    + (o.props().size() > 6 ? ", …" : "") + "}";
+        }
+        if (node instanceof Func) {
+            return "() => …";
+        }
+        String dotted = Js.dottedName(node);
+        return dotted != null ? dotted : "…";
+    }
+
+    private static String kind(Node node) {
+        return node == null ? "değer yok" : node.getClass().getSimpleName();
     }
 
     /** {@code axios(config)}, {@code axios(url, config)}, {@code instance.request(config)}. */

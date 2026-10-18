@@ -48,3 +48,7 @@ JSON'da `\` iki kez yazılmalı:
 - **Kodlama:** UTF-8 olarak çözülemeyen dosyalar (eski "ANSI" kayıtlar) windows-1254 olarak okunur.
 - **Büyük-küçük harf:** Windows'ta çalışan `import Button from './button'` gibi harf farkı olan import'lar, birebir
   eşleşme yoksa harf duyarsız olarak çözülür.
+
+## Loglar
+
+Ayrıntılı analiz logunu (DEBUG) açmak için bkz. [logging.md](logging.md).

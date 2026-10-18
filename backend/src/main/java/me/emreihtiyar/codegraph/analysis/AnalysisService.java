@@ -193,9 +193,7 @@ public class AnalysisService implements DisposableBean {
                 RepoFacts facts = analyzeRepo(repo, config, libraryRoots, libraryModel, fileCounts);
                 durations.put(repo.name(), Duration.ofNanos(System.nanoTime() - t0).toMillis());
                 analyzed.add(new AnalyzedRepo(repo, facts, GitInfo.headCommit(repo.path()).orElse(null)));
-                log.info("{}: {} sınıf, {} metot, {} endpoint, {} ApiCall, {} sorun ({} ms)", repo.name(),
-                        facts.classes().size(), facts.methods().size(), facts.endpoints().size(),
-                        facts.apiCalls().size(), facts.issues().size(), durations.get(repo.name()));
+                logRepo(repo, facts, fileCounts.getOrDefault(repo.name(), 0), durations.get(repo.name()));
             }
 
             progress(runId, "LINK", null, ordered.size(), ordered.size());
@@ -262,6 +260,26 @@ public class AnalysisService implements DisposableBean {
                     repo.layer() == Layer.BFF ? (repo.gatewayPrefix() != null ? repo.gatewayPrefix() : name) : null));
             empty.issues().add(new ParseIssue("", 0, "Repo analiz edilemedi: " + e));
             return empty;
+        }
+    }
+
+    private static void logRepo(RepoDefinition repo, RepoFacts facts, int files, long ms) {
+        if (repo.layer() == Layer.FRONTEND) {
+            log.info("{}: {} dosya, {} component, {} ekran, {} ApiCall, {} ApiCall kullanımı, {} sorun ({} ms)",
+                    repo.name(), files, facts.components().size(), facts.screens().size(), facts.apiCalls().size(),
+                    facts.apiCallUsages().size(), facts.issues().size(), ms);
+        } else {
+            log.info("{}: {} dosya, {} sınıf, {} metot, {} endpoint, {} Feign metodu, {} sorun ({} ms)", repo.name(),
+                    files, facts.classes().size(), facts.methods().size(), facts.endpoints().size(),
+                    facts.feignMethods().size(), facts.issues().size(), ms);
+        }
+        if (files == 0) {
+            log.warn("{}: analiz edilecek dosya bulunamadı; repos dosyasındaki path ({}) ve layer ({}) doğru mu?",
+                    repo.name(), repo.path(), repo.layer());
+        }
+        IssueSummary.of(facts.issues()).forEach(line -> log.info("{}: sorun özeti: {}", repo.name(), line));
+        if (log.isDebugEnabled()) {
+            facts.issues().forEach(i -> log.debug("{}: sorun {}:{} {}", repo.name(), i.file(), i.line(), i.message()));
         }
     }
 
