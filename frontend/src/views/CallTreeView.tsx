@@ -31,7 +31,10 @@ function options(params: TreeParams): CallTreeOptions {
   };
 }
 
-/** Metot çağrı ağacı (FR-22) ve filtreleri (FR-23); seviyeler tembel yüklenir. */
+/**
+ * Çağrı ağacı (FR-22) ve filtreleri (FR-23); seviyeler tembel yüklenir. Ekrandan başlanırsa ekranın istekleri
+ * (component'ler atlanarak), oradan BFF endpoint'leri ve handler'ları gelir.
+ */
 export function CallTreeView({ params }: { params: TreeParams }) {
   const { graphVersion } = useAppState();
   const opts = options(params);
@@ -60,8 +63,8 @@ export function CallTreeView({ params }: { params: TreeParams }) {
     return (
       <StartPicker
         title="Çağrı ağacının kökünü seçin"
-        hint="Servis seçip bir endpoint seçin ya da üstteki arama kutusundan bir metot arayın."
-        withScreens={false}
+        hint="Servis seçip bir ekran ya da endpoint seçin; ekranda hangi isteklerin atıldığı ve BFF'te nereye gittiği görünür. Metot için üstteki aramayı kullanın."
+        withScreens
         service={params.svc}
         onService={(svc) => navigate('tree', { svc })}
         onPick={(root) => navigate('tree', { svc: params.svc, root })}
@@ -154,9 +157,13 @@ function TreeRow({ node, path, parent, index, expanded, loading, onToggle }: Row
   const crossService = parent && node.service && parent.service !== node.service;
 
   const showCode = () => {
-    const tabs: CodeTab[] = [{ nodeId: node.nodeId, caption: meta.title === 'Metot' ? 'Metot' : meta.title }];
-    if (parent && typeof call.line === 'number') {
-      tabs.push({ nodeId: parent.nodeId, caption: `Çağrı yeri · satır ${call.line}`, line: call.line });
+    const tabs: CodeTab[] = [{ nodeId: node.nodeId, caption: meta.title }];
+    const line = typeof call.line === 'number' ? call.line : undefined;
+    if (typeof call.componentId === 'string') {
+      // Ekranın isteği: çağrı yeri ekranın kendisi değil, isteği atan component
+      tabs.push({ nodeId: call.componentId, caption: `${String(call.component)}${line ? ` · satır ${line}` : ''}`, line });
+    } else if (parent && line) {
+      tabs.push({ nodeId: parent.nodeId, caption: `Çağrı yeri · satır ${line}`, line });
     }
     openCode(tabs);
   };
@@ -189,6 +196,7 @@ function TreeRow({ node, path, parent, index, expanded, loading, onToggle }: Row
         )}
         {node.recursive && <Badge tone="danger" title="Bu metot ağaçta atalarından biri">özyinelemeli</Badge>}
         <Details node={node} />
+        {node.kind === 'API_CALL' && <RequestSource call={call} />}
         {typeof call.line === 'number' && <span className="muted small tree-line">satır {call.line}</span>}
       </div>
       {isOpen && node.children!.length > 0 && (
@@ -226,5 +234,32 @@ function Details({ node }: { node: CallTreeNode }) {
     if (node.name.includes(String(d.path ?? ''))) return null;
     return <span className="tree-details mono">{String(d.httpMethod ?? '')} {String(d.path ?? '')}</span>;
   }
+  if (node.kind === 'API_CALL') {
+    const method = String(d.httpMethod ?? 'ANY');
+    return (
+      <span className="tree-details">
+        <span className={`method method-${method.toLowerCase()}`}>{method}</span>{' '}
+        <span className="mono">{String(d.urlTemplate ?? '')}</span>
+        {typeof d.targetService === 'string' && <> → <b>{d.targetService}</b></>}
+        {d.resolution === 'UNRESOLVED' && <Badge tone="danger" title={String(d.unresolvedReason ?? '')}>çözülemedi</Badge>}
+        {d.resolution === 'AMBIGUOUS' && <Badge tone="warn">belirsiz</Badge>}
+      </span>
+    );
+  }
+  if (node.kind === 'SCREEN' && typeof d.screenName === 'string') {
+    return <span className="tree-details muted">{d.screenName}</span>;
+  }
   return null;
+}
+
+/** Ekranın isteğinin çıktığı yer: component ve (varsa) hook zinciri, ör. {@code useScore > useQuery}. */
+function RequestSource({ call }: { call: Record<string, unknown> }) {
+  const components = Array.isArray(call.components) ? (call.components as string[]) : [];
+  return (
+    <span className="tree-details muted small">
+      · {String(call.component ?? '')}
+      {components.length > 1 && <span title={components.join(', ')}> +{components.length - 1}</span>}
+      {typeof call.hook === 'string' && <> <Badge tone="info" title="İsteği saran hook zinciri">{call.hook}</Badge></>}
+    </span>
+  );
 }

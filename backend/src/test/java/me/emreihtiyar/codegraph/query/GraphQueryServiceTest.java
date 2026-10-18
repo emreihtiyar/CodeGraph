@@ -100,6 +100,14 @@ class GraphQueryServiceTest {
                 .doesNotContain("ApplicationServiceImpl.merge", "ApplicationServiceImpl.validateRequest");
         assertThat(trace.graph().edges()).allSatisfy(e -> assertThat(trace.graph().nodes())
                 .extracting(NodeSummary::id).contains(e.source(), e.target()));
+        // Ekranın component ağacı gizli: ekran isteklerine doğrudan bağlı, kenarda isteğin çıktığı component
+        assertThat(trace.graph().nodes()).extracting(NodeSummary::label).doesNotContain("Component");
+        assertThat(trace.summary().apiCalls()).extracting(NodeSummary::name)
+                .containsExactlyInAnyOrder("getCreditApplication", "createCreditApplication", "getScore");
+        assertThat(trace.graph().edges()).filteredOn(e -> e.type().equals("USES_API_CALL"))
+                .allSatisfy(e -> assertThat(e.source()).isEqualTo(trace.start().id()))
+                .extracting(e -> e.properties().get("component"))
+                .containsExactlyInAnyOrder("CreditApplicationScreen", "ApplicationForm", "ScoreBadge");
 
         TraceResult full = queries.traceForward("/credit-application",
                 new TraceOptions(TraceOptions.DEFAULT_DEPTH, false, false, TraceOptions.DEFAULT_MAX_NODES));
@@ -195,6 +203,31 @@ class GraphQueryServiceTest {
             assertThat(c.recursive()).isTrue();
             assertThat(c.children()).isNull();
         });
+    }
+
+    /** Ekran → istekleri (component'ler atlanır) → BFF endpoint'i → handler. */
+    @Test
+    void callTreeFromScreen() {
+        CallTreeNode screen = queries.callTree("/credit-application",
+                new CallTreeOptions(3, false, false, true, List.of(), List.of()));
+        assertThat(screen.kind()).isEqualTo("SCREEN");
+        assertThat(screen.children())
+                .extracting(CallTreeNode::kind, CallTreeNode::name, c -> c.call().get("component"), c -> c.call().get("hook"))
+                .containsExactly(
+                        tuple("API_CALL", "getCreditApplication", "CreditApplicationScreen", "useQuery"),
+                        tuple("API_CALL", "createCreditApplication", "ApplicationForm", "useMutation"),
+                        tuple("API_CALL", "getScore", "ScoreBadge", "useScore > useQuery"));
+        CallTreeNode create = screen.children().get(1);
+        assertThat(create.details()).containsEntry("httpMethod", "POST").containsEntry("targetService", "leasing-credit-bff");
+        assertThat(create.children()).singleElement().satisfies(endpoint -> {
+            assertThat(endpoint.kind()).isEqualTo("ENDPOINT");
+            assertThat(endpoint.service()).isEqualTo("leasing-credit-bff");
+            assertThat(endpoint.children()).singleElement().satisfies(h -> assertThat(h.kind()).isEqualTo("METHOD"));
+        });
+
+        CallTreeNode customer = queries.callTree("/customers/:customerId", CallTreeOptions.defaults());
+        assertThat(customer.children()).filteredOn(c -> c.name().equals("getScore")).singleElement()
+                .satisfies(c -> assertThat(c.call().get("components")).isEqualTo(List.of("CustomerDetailScreen", "ScoreBadge")));
     }
 
     @Test

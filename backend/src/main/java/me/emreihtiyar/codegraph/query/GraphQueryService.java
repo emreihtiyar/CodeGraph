@@ -50,6 +50,8 @@ public class GraphQueryService {
             List.of("FRONTEND", "BFF", "API", "ADAPTER", "LIBRARY");
     private static final Set<String> FORWARD_RELEVANT =
             Set.of("Table", "Entity", "RepositoryMethod", "FeignMethod", "Endpoint", "ApiCall");
+    private static final List<String> CALL_TREE_ROOTS =
+            List.of("Method", "Endpoint", "FeignMethod", "RepositoryMethod", "Screen", "ApiCall");
     private static final List<String> SEARCH_FIELDS =
             List.of("name", "fqn", "path", "normalizedPath", "routePath", "qualifiedName", "urlTemplate");
 
@@ -200,7 +202,11 @@ public class GraphQueryService {
         return trace("BACKWARD", start, result);
     }
 
+    /** Component'ten başlanmadıysa ekranların component ağacı gizlenir (bkz. {@link Traversal#collapseScreens}). */
     private TraceResult trace(String direction, GraphNode start, Traversal.Result result) {
+        if (!start.labels().contains("Component")) {
+            result = Traversal.collapseScreens(result);
+        }
         List<NodeSummary> nodes = result.nodes().values().stream().map(NodeSummary::of).toList();
         List<EdgeView> edges = result.relationships().stream().map(EdgeView::of).toList();
         String note = result.truncated()
@@ -212,6 +218,7 @@ public class GraphQueryService {
 
     private TraceResult.Summary summary(Traversal.Result result) {
         List<NodeSummary> screens = new ArrayList<>();
+        List<NodeSummary> apiCalls = new ArrayList<>();
         List<NodeSummary> endpoints = new ArrayList<>();
         List<NodeSummary> unresolved = new ArrayList<>();
         Set<String> serviceNames = new LinkedHashSet<>();
@@ -228,6 +235,9 @@ public class GraphQueryService {
                 case "Table" -> tables.put(n.id(), n);
                 case "Service" -> serviceNames.add((String) n.properties().get("name"));
                 case "ApiCall", "FeignMethod" -> {
+                    if (label.equals("ApiCall")) {
+                        apiCalls.add(NodeSummary.of(n));
+                    }
                     if ("UNRESOLVED".equals(n.properties().get("resolution"))) {
                         unresolved.add(NodeSummary.of(n));
                     }
@@ -253,8 +263,11 @@ public class GraphQueryService {
         });
         tableAccess.sort(Comparator.comparing(TraceResult.TableAccess::name));
         screens.sort(Comparator.comparing(NodeSummary::name));
+        apiCalls.sort(Comparator.comparing((NodeSummary a) -> String.valueOf(a.properties().get("urlTemplate")))
+                .thenComparing(NodeSummary::name));
         endpoints.sort(Comparator.comparing((NodeSummary e) -> String.valueOf(e.service())).thenComparing(NodeSummary::name));
-        return new TraceResult.Summary(screens, servicesByLayer(serviceNames), endpoints, tableAccess, unresolved);
+        return new TraceResult.Summary(screens, apiCalls, servicesByLayer(serviceNames), endpoints, tableAccess,
+                unresolved);
     }
 
     private List<TraceResult.LayerServices> servicesByLayer(Set<String> names) {
@@ -317,13 +330,12 @@ public class GraphQueryService {
         return new TableUsages(tables.stream().map(NodeSummary::of).toList(), entities, usages);
     }
 
-    /** Metot, endpoint ya da Feign metodundan başlayan çağrı ağacı (FR-22). */
+    /** Metot, endpoint, Feign/repository metodu, ekran ya da ApiCall'dan başlayan çağrı ağacı (FR-22). */
     public CallTreeNode callTree(String ref, CallTreeOptions options) {
         GraphNode root = resolveNode(ref);
-        if (!root.labels().contains("Method") && !root.labels().contains("Endpoint")
-                && !root.labels().contains("FeignMethod") && !root.labels().contains("RepositoryMethod")) {
-            throw new IllegalArgumentException("Çağrı ağacı yalnızca metot, endpoint, Feign ya da repository metodu için: "
-                    + NodeSummary.label(root) + " " + NodeSummary.of(root).name());
+        if (CALL_TREE_ROOTS.stream().noneMatch(root.labels()::contains)) {
+            throw new IllegalArgumentException("Çağrı ağacı yalnızca metot, endpoint, Feign/repository metodu, ekran ya da "
+                    + "ApiCall için: " + NodeSummary.label(root) + " " + NodeSummary.of(root).name());
         }
         return callTrees.tree(root, options);
     }

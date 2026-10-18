@@ -12,11 +12,13 @@ public record TraceResult(String direction, NodeSummary start, Subgraph graph, S
     /**
      * Izdeki önemli düğümler.
      *
+     * @param apiCalls   ekranlardan çıkan istekler (ApiCall), URL'ye göre sıralı
      * @param services   katman → servis adları (katman sırasıyla)
      * @param unresolved hedefi çözülemeyen ApiCall/Feign metotları
      */
     public record Summary(
             List<NodeSummary> screens,
+            List<NodeSummary> apiCalls,
             List<LayerServices> services,
             List<NodeSummary> endpoints,
             List<TableAccess> tables,

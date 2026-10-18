@@ -4,7 +4,7 @@ import type { EdgeView, NodeSummary, TraceResult } from '../api/types.ts';
 import { GraphCanvas } from '../components/GraphCanvas.tsx';
 import { NodeInspector } from '../components/NodeInspector.tsx';
 import { StartPicker } from '../components/StartPicker.tsx';
-import { Badge, ErrorBox, NodeLine, Spinner, Toggle } from '../components/ui.tsx';
+import { Badge, ErrorBox, NodeLine, RequestLine, Spinner, Toggle } from '../components/ui.tsx';
 import { CALL_TYPES, traceElements } from '../lib/graphElements.ts';
 import { LABELS, LAYER_TITLES } from '../lib/labels.ts';
 import { navigate } from '../lib/route.ts';
@@ -120,10 +120,19 @@ export function TraceView({ params }: { params: TraceParams }) {
   );
 }
 
-/** Kenara tıklanınca: çağrı kenarında çağıranın kodu çağrı satırı vurgulu, ikinci sekmede çağrılan. */
+/**
+ * Kenara tıklanınca: çağrı kenarında çağıranın kodu çağrı satırı vurgulu, ikinci sekmede çağrılan. Ekran → ApiCall
+ * kenarında çağıran, isteği atan component'tir (ekranın component ağacı izde gizli).
+ */
 export function edgeCode(edge: EdgeView, trace: TraceResult): [CodeTab[], number] {
   const name = (id: string) => trace.graph.nodes.find((n) => n.id === id)?.name ?? id;
   const line = typeof edge.properties.line === 'number' ? edge.properties.line : undefined;
+  if (edge.type === 'USES_API_CALL' && typeof edge.properties.componentId === 'string') {
+    return [[
+      { nodeId: edge.properties.componentId, caption: `${String(edge.properties.component)}${line ? ` · satır ${line}` : ''}`, line },
+      { nodeId: edge.target, caption: name(edge.target) },
+    ], 0];
+  }
   if (CALL_TYPES.has(edge.type)) {
     return [[
       { nodeId: edge.source, caption: line ? `Çağrı yeri · satır ${line}` : 'Çağıran', line },
@@ -156,6 +165,12 @@ function Summary({ trace, onSelect }: { trace: TraceResult; onSelect: (id: strin
         <section>
           <h3>Ekranlar</h3>
           {s.screens.map((n) => <NodeLine key={n.id} node={n} onClick={() => pick(n)} />)}
+        </section>
+      )}
+      {s.apiCalls.length > 0 && (
+        <section>
+          <h3>İstekler <span className="muted">({s.apiCalls.length})</span></h3>
+          {s.apiCalls.map((a) => <RequestLine key={a.id} apiCall={a} onClick={() => pick(a)} />)}
         </section>
       )}
       <section>

@@ -23,6 +23,8 @@ export const KIND_LABEL: Record<CallTreeKind, NodeLabel> = {
   FEIGN_METHOD: 'FeignMethod',
   REPOSITORY_METHOD: 'RepositoryMethod',
   ENDPOINT: 'Endpoint',
+  SCREEN: 'Screen',
+  API_CALL: 'ApiCall',
 };
 
 export const LAYER_TITLES: Record<string, string> = {
@@ -71,5 +73,6 @@ export function defaultAction(label: NodeLabel): NodeAction {
 }
 
 export function isCallable(label: NodeLabel): boolean {
-  return label === 'Method' || label === 'FeignMethod' || label === 'RepositoryMethod' || label === 'Endpoint';
+  return label === 'Method' || label === 'FeignMethod' || label === 'RepositoryMethod' || label === 'Endpoint'
+    || label === 'Screen' || label === 'ApiCall';
 }

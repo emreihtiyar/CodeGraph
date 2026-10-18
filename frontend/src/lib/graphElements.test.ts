@@ -44,7 +44,7 @@ describe('traceElements', () => {
       note: null,
     },
     summary: {
-      screens: [], endpoints: [], unresolved: [],
+      screens: [], apiCalls: [], endpoints: [], unresolved: [],
       services: [{ layer: 'BFF', services: ['bff'] }, { layer: 'API', services: ['api'] }],
       tables: [{ id: 't', name: 'T', access: ['READ', 'WRITE'] }],
     },

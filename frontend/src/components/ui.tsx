@@ -26,6 +26,20 @@ export function NodeLine({ node, onClick }: { node: NodeSummary; onClick?: () =>
   );
 }
 
+/** İstek (ApiCall): metot, URL şablonu ve fonksiyon adı; {@code detail} hedef endpoint gibi ek satır. */
+export function RequestLine({ apiCall, detail, onClick }: { apiCall: NodeSummary; detail?: ReactNode; onClick: () => void }) {
+  const method = String(apiCall.properties.httpMethod ?? 'ANY');
+  return (
+    <button type="button" className="link summary-request" onClick={onClick}>
+      <span className="summary-request-head">
+        <span className={`method method-${method.toLowerCase()}`}>{method}</span>
+        <span className="mono break">{String(apiCall.properties.urlTemplate ?? '')}</span>
+      </span>
+      <span className="muted small">{apiCall.name}{detail}</span>
+    </button>
+  );
+}
+
 export type BadgeTone = 'neutral' | 'info' | 'warn' | 'danger' | 'ok' | 'purple';
 
 export function Badge({ tone = 'neutral', title, children }: { tone?: BadgeTone; title?: string; children: ReactNode }) {

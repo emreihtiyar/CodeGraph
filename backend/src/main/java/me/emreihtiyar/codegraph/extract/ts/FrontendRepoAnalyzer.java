@@ -72,7 +72,7 @@ public class FrontendRepoAnalyzer {
             facts.apiCallUsages().addAll(components.usages(c));
             facts.renders().addAll(components.renders(c));
         }
-        facts.screens().addAll(new RouteExtractor(project, components).extract());
+        facts.screens().addAll(new RouteExtractor(project, components).extract(facts.issues()));
         log.debug("{}: {} component, {} ApiCall kullanımı, {} RENDERS, {} ekran", repo.name(), facts.components().size(),
                 facts.apiCallUsages().size(), facts.renders().size(), facts.screens().size());
         if (log.isTraceEnabled()) {
@@ -83,8 +83,8 @@ public class FrontendRepoAnalyzer {
         facts.screens().forEach(s -> log.debug("{}: ekran {} '{}' → {}", repo.name(), s.routePath(), s.name(),
                 s.componentKey()));
         if (facts.screens().isEmpty()) {
-            log.debug("{}: route tanımı (<Route path element/component>, createBrowserRouter, routes dizisi) bulunamadı",
-                    repo.name());
+            log.warn("{}: hiç ekran bulunamadı; route dizisi ({ path, component/element } nesneleri) ya da <Route> "
+                    + "aranır, ayrıntı için DEBUG logu", repo.name());
         }
         return facts;
     }

@@ -25,7 +25,7 @@ import me.emreihtiyar.codegraph.extract.ts.JsModule.ImportRef;
 /**
  * Bir frontend reposunun modülleri ve aralarındaki sembol çözümü: göreli import'lar, tsconfig/jsconfig
  * {@code paths} takma adları, yeniden export'lar ({@code export * from}, {@code export { a as b } from}), ad alanı
- * import'ları ve {@code lazy(() => import('./X'))}.
+ * import'ları ve dinamik import sarmalayıcıları ({@code lazy(() => import('./X'))}, {@code asyncComponent(...)}).
  */
 public final class JsProject {
 
@@ -216,17 +216,17 @@ public final class JsProject {
     }
 
     /**
-     * Takma adları izler: {@code const A = B} → B'nin sembolü; {@code const A = lazy(() => import('./A'))} →
-     * A modülünün varsayılan export'u.
+     * Takma adları izler: {@code const A = B} → B'nin sembolü; {@code const A = lazy(() => import('./A'))} veya
+     * {@code asyncComponent(() => import('./A'))} → A modülünün varsayılan export'u.
      */
     private Symbol follow(Symbol symbol, Set<String> visited) {
         Node value = symbol.value();
         if (value instanceof Ident i && !i.name().equals(symbol.name())) {
             return resolveName(symbol.module(), i.name(), visited).orElse(symbol);
         }
-        String lazyTarget = lazyImport(value);
-        if (lazyTarget != null) {
-            Optional<JsModule> target = resolveModule(symbol.module(), lazyTarget);
+        String importTarget = wrappedImport(value);
+        if (importTarget != null) {
+            Optional<JsModule> target = resolveModule(symbol.module(), importTarget);
             if (target.isPresent()) {
                 return resolveExport(target.get(), JsModule.DEFAULT, visited).orElse(symbol);
             }
@@ -234,10 +234,18 @@ public final class JsProject {
         return symbol;
     }
 
-    /** {@code lazy(() => import('./X'))} veya {@code React.lazy(...)} ise import belirteci. */
-    static String lazyImport(Node value) {
-        if (value instanceof Call call && "lazy".equals(Js.calleeName(call)) && call.args().size() == 1) {
-            return dynamicImport(call.args().get(0));
+    /**
+     * Dinamik import'u saran çağrının import belirteci: {@code lazy(() => import('./X'))}, {@code React.lazy(...)},
+     * {@code asyncComponent(() => import('./X'))}, {@code loadable(() => import('./X'), {...})}.
+     */
+    static String wrappedImport(Node value) {
+        if (value instanceof Call call) {
+            for (Node arg : call.args()) {
+                String specifier = dynamicImport(arg);
+                if (specifier != null) {
+                    return specifier;
+                }
+            }
         }
         return null;
     }

@@ -150,8 +150,9 @@ public class CodeGraphTools {
         list.add(new Tool(ToolNames.TRACE_FORWARD, "İleri iz (ekrandan tablolara)",
                 "Bir ekran, component, ApiCall, endpoint, metot ya da servisten başlayıp çağrı zincirini BFF → API → "
                         + "adapter → veritabanı tablolarına kadar izler. 'Bu ekran hangi servislere ve tablolara dokunuyor?' "
-                        + "sorusunun cevabı. Özet: katmana göre servisler, endpoint'ler, tablolar (READ/WRITE) ve zincirin "
-                        + "koptuğu çözülemeyen çağrılar. Alt graf varsayılan olarak yalnızca sayılarla döner; düğüm ve kenarlar "
+                        + "sorusunun cevabı. Ekranların component ağacı gizlenir; ekran, isteklerine (ApiCall) doğrudan "
+                        + "bağlanır. Özet: ekranlardan çıkan istekler, katmana göre servisler, endpoint'ler, tablolar "
+                        + "(READ/WRITE) ve zincirin koptuğu çözülemeyen çağrılar. Alt graf varsayılan olarak yalnızca sayılarla döner; düğüm ve kenarlar "
                         + "için includeGraph=true verin.",
                 traceSchema(true),
                 a -> {
@@ -245,11 +246,13 @@ public class CodeGraphTools {
                     int limit = a.integer("limit", IMPACT_LIST_DEFAULT);
                     return new Output(impact(r, limit), TextSummaries.impact(r, Math.min(limit, TextSummaries.LIST_LIMIT)));
                 }));
-        list.add(new Tool(ToolNames.GET_CALL_TREE, "Metot çağrı ağacı",
+        list.add(new Tool(ToolNames.GET_CALL_TREE, "Çağrı ağacı",
                 "Bir metodun (ya da endpoint/Feign/repository metodunun) çağırdığı metotları kod sırasıyla ağaç olarak "
                         + "döner; koşul, döngü, async, lambda ve özyineleme bilgisiyle. Feign çağrılarında hedef servisin "
-                        + "endpoint'ine ve handler'ına devam eder (crossService). '…' ile biten düğümlerin çocukları "
-                        + "yüklenmemiştir; o düğümün id'siyle tekrar çağırın.",
+                        + "endpoint'ine ve handler'ına devam eder (crossService). Ekrandan başlanırsa ekranın istekleri "
+                        + "(ApiCall; hangi component'ten, hangi hook'la) ve oradan BFF endpoint'leri gelir: 'Bu ekran hangi "
+                        + "istekleri atıyor?' sorusunun cevabı. '…' ile biten düğümlerin çocukları yüklenmemiştir; o "
+                        + "düğümün id'siyle tekrar çağırın.",
                 InputSchema.object()
                         .string("ref", REF, true)
                         .integer("depth", "Açılacak seviye sayısı", 1, 10, 3)

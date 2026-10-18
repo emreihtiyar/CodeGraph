@@ -107,6 +107,8 @@ export interface TraceResult {
   graph: Subgraph;
   summary: {
     screens: NodeSummary[];
+    /** Ekranlardan çıkan istekler (ApiCall). */
+    apiCalls: NodeSummary[];
     services: LayerServices[];
     endpoints: NodeSummary[];
     tables: TableAccess[];
@@ -142,7 +144,7 @@ export interface SearchHit {
   score: number;
 }
 
-export type CallTreeKind = 'METHOD' | 'FEIGN_METHOD' | 'REPOSITORY_METHOD' | 'ENDPOINT';
+export type CallTreeKind = 'METHOD' | 'FEIGN_METHOD' | 'REPOSITORY_METHOD' | 'ENDPOINT' | 'SCREEN' | 'API_CALL';
 
 export interface CallTreeNode {
   nodeId: string;

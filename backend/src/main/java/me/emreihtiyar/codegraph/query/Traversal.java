@@ -120,6 +120,62 @@ final class Traversal {
         return new Result(nodes, rels, result.distance(), result.truncated());
     }
 
+    /**
+     * Ekranların component ağacını gizler: ekrandan RENDERS ile ulaşılan component'ler çıkarılır, kullandıkları
+     * ApiCall'lar ekrana doğrudan {@code USES_API_CALL} kenarıyla bağlanır. Kenar özellikleri isteğin çıktığı yeri
+     * taşır: {@code component}, {@code componentId}, {@code line}, {@code via}, {@code hook}. Hiçbir ekrandan
+     * ulaşılamayan component'ler (ör. geri izde route'u olmayan) olduğu gibi kalır.
+     */
+    static Result collapseScreens(Result result) {
+        Map<String, List<GraphRelationship>> renders = new HashMap<>();
+        Map<String, List<GraphRelationship>> uses = new HashMap<>();
+        for (GraphRelationship r : result.relationships()) {
+            if (r.type().equals("RENDERS")) {
+                renders.computeIfAbsent(r.startId(), k -> new ArrayList<>()).add(r);
+            } else if (r.type().equals("USES_API_CALL")) {
+                uses.computeIfAbsent(r.startId(), k -> new ArrayList<>()).add(r);
+            }
+        }
+        Set<String> hidden = new HashSet<>();
+        List<GraphRelationship> direct = new ArrayList<>();
+        for (GraphNode screen : result.nodes().values()) {
+            if (!screen.labels().contains("Screen")) {
+                continue;
+            }
+            Set<String> visited = new HashSet<>(Set.of(screen.id()));
+            Set<String> apiCalls = new HashSet<>();
+            ArrayDeque<String> queue = new ArrayDeque<>(List.of(screen.id()));
+            while (!queue.isEmpty()) {
+                String id = queue.poll();
+                for (GraphRelationship u : uses.getOrDefault(id, List.of())) {
+                    if (apiCalls.add(u.endId())) {
+                        Map<String, Object> props = new LinkedHashMap<>(u.properties());
+                        props.put("order", apiCalls.size());
+                        props.put("component", NodeSummary.of(result.nodes().get(id)).name());
+                        props.put("componentId", id);
+                        direct.add(new GraphRelationship("USES_API_CALL", screen.id(), u.endId(), props));
+                    }
+                }
+                for (GraphRelationship r : renders.getOrDefault(id, List.of())) {
+                    if (visited.add(r.endId())) {
+                        hidden.add(r.endId());
+                        queue.add(r.endId());
+                    }
+                }
+            }
+        }
+        if (hidden.isEmpty()) {
+            return result;
+        }
+        Map<String, GraphNode> nodes = new LinkedHashMap<>(result.nodes());
+        nodes.keySet().removeAll(hidden);
+        List<GraphRelationship> rels = new ArrayList<>(result.relationships().stream()
+                .filter(r -> !hidden.contains(r.startId()) && !hidden.contains(r.endId()))
+                .toList());
+        rels.addAll(direct);
+        return new Result(nodes, rels, result.distance(), result.truncated());
+    }
+
     static boolean isAccessor(GraphNode n) {
         return n.labels().contains("Method") && Boolean.TRUE.equals(n.properties().get("isAccessor"));
     }

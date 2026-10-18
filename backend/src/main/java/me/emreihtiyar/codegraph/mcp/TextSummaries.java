@@ -104,6 +104,13 @@ final class TextSummaries {
         if (!s.screens().isEmpty()) {
             sb.append("Ekranlar: ").append(names(s.screens())).append('\n');
         }
+        if (!s.apiCalls().isEmpty()) {
+            sb.append("Ekranlardan çıkan istekler (").append(s.apiCalls().size()).append("):\n");
+            limit(s.apiCalls()).forEach(a -> sb.append("  ").append(a.properties().get("httpMethod")).append(' ')
+                    .append(a.properties().get("urlTemplate")).append(" — ").append(a.name()).append(" [")
+                    .append(a.id()).append("]\n"));
+            more(sb, s.apiCalls());
+        }
         sb.append("Servisler (katmana göre):\n");
         s.services().forEach(l -> sb.append("  ").append(l.layer()).append(": ").append(String.join(", ", l.services()))
                 .append('\n'));

@@ -60,6 +60,9 @@ prefix'ini döndürür ve kendisi ApiCall değildir.
 
 ## Ekranlar ve component'ler
 
+Ekranlar `src/routes.ts` dizisindeki `{ path, component: asyncComponent(() => import("./screens/X")) }` nesnelerinden
+çıkarılır; component, import edilen modülün varsayılan export'udur.
+
 | Route                   | Ekran component'i       | RENDERS                       | ApiCall kullanımı (sıra, via/hook) |
 |-------------------------|-------------------------|-------------------------------|------------------------------------|
 | /credit-application     | CreditApplicationScreen | ScoreBadge, ApplicationForm   | 1 getCreditApplication (REACT_QUERY/useQuery) |

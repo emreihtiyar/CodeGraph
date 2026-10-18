@@ -67,6 +67,17 @@ tsconfig'te tanım yoksa `@/…` ve `~/…`, `src/…` kabul ediliyor.
 - **Varsayım:** Bu yeterli. Gerçek projede farklı bir alias varsa repo yapılandırmasına `aliases` haritası eklerim.
 - Cevap:
 
+### Q8b. Ekranlar (route listesi)
+Gerçek UI'larda ekranlar `src/routes.ts`'teki
+`{ path, processId, component: asyncComponent(() => import("./features/.../XPage")), i18n }` nesnelerinden geliyor.
+- **Arama:** route dizisi yapısına göre aranıyor (`path` ile birlikte `component`/`element`); dizinin kime verildiği
+  önemsiz. `asyncComponent` gibi dinamik import'u saran her çağrı tanınıyor.
+- **Ad:** ekranın adı import edilen dosyanın adı (`SellerContributionPage`).
+- **Component:** dosyanın varsayılan export'u. `withX(Content)` gibi sarmalanmışsa içteki component alınıyor.
+- **Varsayım:** sayfa dosyaları `export default` ile dışa aktarılıyor. Ekran sayısı route listesindekinden azsa Analiz
+  ekranındaki "Route '…': component bulunamadı" sorunları nedenini gösterir.
+- Cevap:
+
 ## Bağlama ve yükleme (M5)
 
 ### Q9. Analiz sırasında sorgular
@@ -166,8 +177,9 @@ FR-21 kod panelinin "ilgili satır vurgulu" açılmasını istiyor. Bir kenar (�
     component'e açılıyor. Kullanımın `hook` alanı zinciri tutuyor (`useSubContractPaymentPlan > useQuery`); satırı
     component'teki çağrı satırı.
   - Aynı ApiCall aynı yolla (via/hook) birden çok kez kullanılırsa tek kullanım sayılıyor.
+  - Ekranlar route dizilerinden (bkz. Q8b) ve JSX `<Route>` ağaçlarından çıkıyor.
   - Route `element`'i sarmalayıcı içeriyorsa (`<Suspense>`, `<RequireAuth>`) en içteki proje component'i ekran oluyor.
-  - Path'siz layout route'ları ekran sayılmıyor.
+  - Path'siz layout route'ları ekran sayılmıyor; `index: true` route'u üst route'un path'ini alıyor.
 - **D14. Linker eşleştirme kuralları:**
   - **ApiCall → BFF:** `targetPrefix`, BFF'in gateway prefix'iyle eşleşir (büyük-küçük harf duyarsız; prefix
     verilmezse servis adı). Kalan path eşleşmezse prefix'li hali de deneniyor (gateway prefix'i kesmiyorsa diye).
@@ -207,6 +219,10 @@ FR-21 kod panelinin "ilgili satır vurgulu" açılmasını istiyor. Bir kenar (�
   - **İleri iz:** yalnızca tabloya, entity'ye, endpoint'e, ApiCall'a ya da Feign/repository metoduna giden dallar
     tutuluyor (`prune=false` ile tamamı).
   - **Geri iz:** budanmıyor, çünkü zamanlanmış işler gibi ekrana bağlı olmayan çağıranlar da önemli.
+  - **Ekranlar:** izde ekranın component ağacı gösterilmiyor. Ekran, isteklerine (ApiCall) doğrudan bağlanıyor; kenarda
+    isteğin çıktığı component, satır ve hook zinciri yazıyor. Component'ten başlanan izde ağaç olduğu gibi kalıyor.
+  - **Ekrandan çağrı ağacı:** ekran → istekleri (önce üst component'ler, her component'te kod sırasıyla; aynı istek bir
+    kez) → BFF endpoint'i → handler → …
   - **Erişimciler:** getter/setter izlerde varsayılan olarak yok, etki analizinde var.
   - **Sınırlar:** derinlik ve düğüm sınırı (varsayılan 40 / 2000) aşılırsa sonuç `truncated` işaretleniyor ve daraltma
     öneriliyor.

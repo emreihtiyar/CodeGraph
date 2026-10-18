@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -13,16 +14,30 @@ import me.emreihtiyar.codegraph.graph.GraphNode;
 import me.emreihtiyar.codegraph.graph.GraphRelationship;
 import me.emreihtiyar.codegraph.graph.GraphStore;
 
-/** Metot çağrı ağacı (FR-22, FR-23) ve endpoint orkestrasyonu (Hikaye 2). */
+/**
+ * Çağrı ağacı (FR-22, FR-23) ve endpoint orkestrasyonu (Hikaye 2). Ağaç bir metottan, endpoint'ten ya da ekrandan
+ * başlar: ekran → istekleri (ApiCall) → BFF endpoint'i → handler metodu → … Ekranın component ağacı gösterilmez;
+ * istekler ekranın altında, hangi component'ten çıktıkları çağrı özelliklerinde yer alır.
+ */
 final class CallTrees {
 
     static final int MAX_TREE_NODES = 500;
     static final int MAX_STEPS = 1000;
+    /** Ekrandan istekleri ararken inilecek en fazla component seviyesi ve component sayısı. */
+    static final int MAX_RENDER_DEPTH = 30;
+    static final int MAX_SCREEN_COMPONENTS = 2000;
 
     private static final String CHILDREN = """
-            MATCH (n:Node)-[r:CALLS|INVOKES|USES_REPOSITORY|RESOLVES_TO|HANDLED_BY]->(m:Node)
-            WHERE n.id IN $ids AND (n:Method OR n:FeignMethod OR n:Endpoint)
+            MATCH (n:Node)-[r:CALLS|INVOKES|USES_REPOSITORY|RESOLVES_TO|HANDLED_BY|REQUESTS]->(m:Node)
+            WHERE n.id IN $ids AND (n:Method OR n:FeignMethod OR n:Endpoint OR n:ApiCall)
             RETURN n.id AS parent, r, m""";
+    private static final String SCREENS = "MATCH (s:Screen) WHERE s.id IN $ids RETURN s.id AS id";
+    private static final String RENDERED = """
+            MATCH (n:Node)-[:RENDERS]->(c:Component) WHERE n.id IN $ids
+            RETURN c.id AS id ORDER BY c.name, c.id""";
+    private static final String USAGES = """
+            MATCH (c:Component)-[u:USES_API_CALL]->(a:ApiCall) WHERE c.id IN $ids
+            RETURN c.id AS component, c.name AS componentName, u, a""";
     private static final String TABLES = """
             MATCH (r:RepositoryMethod)-[a:READS|WRITES]->(:Entity)-[:MAPPED_TO]->(t:Table)
             WHERE r.id IN $ids
@@ -51,6 +66,7 @@ final class CallTrees {
         int budget = MAX_TREE_NODES;
         for (int level = 0; level <= options.depth() && !frontier.isEmpty(); level++) {
             Map<String, List<Child>> batch = children(frontier, options);
+            batch.putAll(screenRequests(frontier));
             loaded.addAll(frontier);
             children.putAll(batch);
             Set<String> repositoryIds = new HashSet<>();
@@ -117,6 +133,75 @@ final class CallTrees {
         return result;
     }
 
+    /** Ekranların istekleri; {@code ids} içindeki ekran olmayan düğümler atlanır. */
+    private Map<String, List<Child>> screenRequests(Collection<String> ids) {
+        Map<String, List<Child>> result = new HashMap<>();
+        for (Map<String, Object> row : store.query(SCREENS, Map.of("ids", List.copyOf(ids)))) {
+            String screen = (String) row.get("id");
+            List<Child> requests = requests(screen);
+            if (!requests.isEmpty()) {
+                result.put(screen, requests);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Ekranın component ağacındaki (RENDERS) tüm ApiCall kullanımları; önce üst component'ler, her component'te kod
+     * sırasıyla. Aynı ApiCall birden çok component'te kullanılıyorsa bir kez yer alır, {@code components} hepsini
+     * sayar. Kenar sentetiktir: ekran → ApiCall, özelliklerinde component, satır ve via/hook.
+     */
+    private List<Child> requests(String screenId) {
+        Map<String, Integer> rank = new LinkedHashMap<>();
+        Set<String> frontier = Set.of(screenId);
+        for (int depth = 0; depth < MAX_RENDER_DEPTH && !frontier.isEmpty() && rank.size() < MAX_SCREEN_COMPONENTS;
+                depth++) {
+            Set<String> next = new LinkedHashSet<>();
+            for (Map<String, Object> row : store.query(RENDERED, Map.of("ids", List.copyOf(frontier)))) {
+                String id = (String) row.get("id");
+                if (!rank.containsKey(id)) {
+                    rank.put(id, rank.size());
+                    next.add(id);
+                }
+            }
+            frontier = next;
+        }
+        if (rank.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> rows = new ArrayList<>(store.query(USAGES, Map.of("ids", List.copyOf(rank.keySet()))));
+        rows.sort(Comparator
+                .comparingInt((Map<String, Object> r) -> rank.get((String) r.get("component")))
+                .thenComparingLong(r -> longOr(((GraphRelationship) r.get("u")).properties().get("order"), Long.MAX_VALUE))
+                .thenComparingLong(r -> longOr(((GraphRelationship) r.get("u")).properties().get("line"), Long.MAX_VALUE)));
+        Map<String, Child> byApiCall = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            GraphNode apiCall = (GraphNode) row.get("a");
+            String component = (String) row.get("componentName");
+            Child existing = byApiCall.get(apiCall.id());
+            if (existing != null) {
+                @SuppressWarnings("unchecked")
+                List<String> components = (List<String>) existing.rel().properties().get("components");
+                if (!components.contains(component)) {
+                    components.add(component);
+                }
+                continue;
+            }
+            Map<String, Object> usage = ((GraphRelationship) row.get("u")).properties();
+            Map<String, Object> props = new LinkedHashMap<>();
+            props.put("order", byApiCall.size() + 1);
+            putIfPresent(props, "line", usage.get("line"));
+            putIfPresent(props, "via", usage.get("via"));
+            putIfPresent(props, "hook", usage.get("hook"));
+            props.put("component", component);
+            props.put("componentId", row.get("component"));
+            props.put("components", new ArrayList<>(List.of(component)));
+            byApiCall.put(apiCall.id(), new Child(new GraphRelationship("USES_API_CALL", screenId, apiCall.id(), props),
+                    apiCall));
+        }
+        return new ArrayList<>(byApiCall.values());
+    }
+
     private static boolean visible(GraphNode method, CallTreeOptions options) {
         Map<String, Object> p = method.properties();
         if (!options.includeAccessors() && Boolean.TRUE.equals(p.get("isAccessor"))) {
@@ -168,6 +253,14 @@ final class CallTrees {
                 putIfPresent(d, "httpMethod", p.get("httpMethod"));
                 putIfPresent(d, "path", p.get("path"));
             }
+            case "API_CALL" -> {
+                putIfPresent(d, "httpMethod", p.get("httpMethod"));
+                putIfPresent(d, "urlTemplate", p.get("urlTemplate"));
+                putIfPresent(d, "targetService", p.get("targetService"));
+                putIfPresent(d, "resolution", p.get("resolution"));
+                putIfPresent(d, "unresolvedReason", p.get("unresolvedReason"));
+            }
+            case "SCREEN" -> putIfPresent(d, "screenName", p.get("name"));
             default -> {
                 putIfPresent(d, "signature", p.get("signature"));
                 putIfPresent(d, "isAbstract", p.get("isAbstract"));
@@ -260,6 +353,12 @@ final class CallTrees {
     // ---- yardımcılar ----
 
     static String kind(GraphNode node) {
+        if (node.labels().contains("Screen")) {
+            return "SCREEN";
+        }
+        if (node.labels().contains("ApiCall")) {
+            return "API_CALL";
+        }
         if (node.labels().contains("FeignMethod")) {
             return "FEIGN_METHOD";
         }
