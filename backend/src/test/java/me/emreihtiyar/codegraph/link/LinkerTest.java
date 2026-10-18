@@ -15,7 +15,6 @@ import me.emreihtiyar.codegraph.extract.model.HttpMethod;
 import me.emreihtiyar.codegraph.extract.model.RepoFacts;
 import me.emreihtiyar.codegraph.extract.model.Resolution;
 import me.emreihtiyar.codegraph.extract.model.ServiceFact;
-import me.emreihtiyar.codegraph.link.Linker.RepoNames;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -26,7 +25,7 @@ class LinkerTest {
 
     @BeforeAll
     static void link() {
-        result = new Linker().link(MiniSystem.facts(), MiniSystem.names());
+        result = new Linker().link(MiniSystem.facts(), MiniSystem.aliases());
     }
 
     @Test
@@ -93,7 +92,7 @@ class LinkerTest {
         bff.feignMethods().add(feign("c.OrderClient#item(long)", HttpMethod.GET, "/items/{*}"));
         bff.feignMethods().add(feign("c.OrderClient#anyItem(long)", HttpMethod.ANY, "/items/{*}"));
 
-        LinkResult r = new Linker().link(List.of(bff, api), Map.of("orders", new RepoNames(null, List.of("orders-legacy"))));
+        LinkResult r = new Linker().link(List.of(bff, api), Map.of("orders", List.of("orders-legacy")));
 
         assertThat(r.feignClients().get(0).targetService()).isEqualTo("order-service");
         assertThat(r.feignMethods())
@@ -108,32 +107,12 @@ class LinkerTest {
         bff.feignMethods().add(feign("c.OrderClient#put(long)", HttpMethod.PUT, "/items/{*}"));
         api.endpoints().removeIf(e -> e.httpMethod() == HttpMethod.ANY);
         bff.feignMethods().add(feign("c.OrderClient#anyItem(long)", HttpMethod.ANY, "/items/{*}"));
-        r = new Linker().link(List.of(bff, api), Map.of("orders", new RepoNames(null, List.of("orders-legacy"))));
+        r = new Linker().link(List.of(bff, api), Map.of("orders", List.of("orders-legacy")));
         assertThat(r.feignMethods())
                 .extracting(l -> shortName(l.sourceKey()), l -> l.targets().size(), LinkResult.Link::resolution)
                 .containsExactly(
                         tuple("OrderClient#put", 0, Resolution.UNRESOLVED),
                         tuple("OrderClient#anyItem", 2, Resolution.AMBIGUOUS));
-    }
-
-    /** feignName başka reponun adıyla çakışsa da kazanır; reponun kendi servis adı yedek olarak eşleşmeye devam eder. */
-    @Test
-    void feignNameWinsOverOtherReposNames() {
-        var bff = RepoFacts.empty("web-bff", Layer.BFF, new ServiceFact("web-bff", Layer.BFF, "", "web"));
-        var old = RepoFacts.empty("orders", Layer.API, new ServiceFact("orders-old", Layer.API, "", null));
-        var api = RepoFacts.empty("orders-v2", Layer.API, new ServiceFact("order-service", Layer.API, "", null));
-        old.endpoints().add(new EndpointFact(HttpMethod.GET, "/orders", "/orders", "x"));
-        api.endpoints().add(new EndpointFact(HttpMethod.GET, "/orders", "/orders", "y"));
-        bff.feignClients().add(new FeignClientFact("c.OrderClient", "ORDERS", "ORDERS", null, null));
-        bff.feignClients().add(new FeignClientFact("c.OrderServiceClient", "order-service", "order-service", null, null));
-        bff.feignMethods().add(feign("c.OrderClient#list()", HttpMethod.GET, "/orders"));
-        bff.feignMethods().add(feign("c.OrderServiceClient#list()", HttpMethod.GET, "/orders"));
-
-        LinkResult r = new Linker().link(List.of(bff, old, api), Map.of("orders-v2", new RepoNames("orders", List.of())));
-
-        assertThat(r.feignClients()).extracting(LinkResult.FeignLink::targetRepo).containsExactly("orders-v2", "orders-v2");
-        assertThat(r.feignMethods()).extracting(LinkerTest::target)
-                .containsOnly("order-service GET /orders");
     }
 
     @Test

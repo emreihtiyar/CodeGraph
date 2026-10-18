@@ -197,9 +197,9 @@ public class AnalysisService implements DisposableBean {
             }
 
             progress(runId, "LINK", null, ordered.size(), ordered.size());
-            Map<String, Linker.RepoNames> names = config.repos().stream()
-                    .collect(Collectors.toMap(RepoDefinition::name, Linker.RepoNames::of));
-            LinkResult links = linker.link(analyzed.stream().map(AnalyzedRepo::facts).toList(), names);
+            Map<String, List<String>> aliases = config.repos().stream()
+                    .collect(Collectors.toMap(RepoDefinition::name, RepoDefinition::aliases));
+            LinkResult links = linker.link(analyzed.stream().map(AnalyzedRepo::facts).toList(), aliases);
 
             progress(runId, "LOAD", null, ordered.size(), ordered.size());
             GraphLoader.Result loaded = loader.build(analyzed, links, startedAt);

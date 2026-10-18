@@ -139,7 +139,7 @@ class TsSourceParserTest {
         if (dir == null) {
             return;
         }
-        var repo = new RepoDefinition("realworld", Path.of(dir).toAbsolutePath(), Layer.FRONTEND, null, null, null, List.of());
+        var repo = new RepoDefinition("realworld", Path.of(dir).toAbsolutePath(), Layer.FRONTEND, null, null, List.of());
         long start = System.nanoTime();
         RepoFacts facts = new FrontendRepoAnalyzer().analyze(new RepoScanner().scan(repo));
         System.out.printf("REALWORLD %dms components=%d renders=%d issues=%s%n", (System.nanoTime() - start) / 1_000_000,

@@ -64,8 +64,7 @@ ApiCall, ApiCalls dosyasının export ettiği ve `callApi({ endpoint, method })`
 
 `Hedef servis analizde yok: X` sorunu, `@FeignClient`'taki `X` adının hiçbir repoya eşlenmediğini gösterir.
 `me.emreihtiyar.codegraph.link` DEBUG'ı `Feign hedef adları: [...]` satırında hangi adın hangi repoya gittiğini yazar.
-Hedef repo analizdeyse repos dosyasında ona `feignName: X` verin (`application.yml`'de `feign-name`). Verilen
-`feignName` servis adından ve repo adından önce denenir.
+Hedef repo analizdeyse repos dosyasında onun `aliases` listesine `X`'i ekleyin.
 
 ## UI'da ekran yoksa ya da eksikse
 

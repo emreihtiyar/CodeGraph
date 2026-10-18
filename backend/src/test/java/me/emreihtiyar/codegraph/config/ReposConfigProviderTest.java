@@ -26,7 +26,6 @@ class ReposConfigProviderTest {
         props.put("codegraph.repos[1].path", Fixtures.miniSystem().resolve("scoring-bff").toString());
         props.put("codegraph.repos[1].layer", "BFF");
         props.put("codegraph.repos[1].gateway-prefix", "/scoring/");
-        props.put("codegraph.repos[1].feign-name", "SCORING-BFF");
         props.put("codegraph.repos[1].aliases[0]", "scoring");
         props.put("codegraph.placeholders.[clients.credit.name]", "credit-api");
 
@@ -36,7 +35,6 @@ class ReposConfigProviderTest {
         RepoDefinition bff = config.repo("bff").orElseThrow();
         assertThat(bff.layer()).isEqualTo(Layer.BFF);
         assertThat(bff.gatewayPrefix()).isEqualTo("scoring");
-        assertThat(bff.feignName()).isEqualTo("SCORING-BFF");
         assertThat(bff.aliases()).containsExactly("scoring");
         assertThat(config.repo("web").orElseThrow().path()).isEqualTo(web);
         assertThat(config.placeholders()).containsEntry("clients.credit.name", "credit-api");

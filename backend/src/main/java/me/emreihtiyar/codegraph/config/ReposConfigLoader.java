@@ -33,8 +33,7 @@ import org.yaml.snakeyaml.error.YAMLException;
  *     layer: BFF                          # FRONTEND | BFF | API | ADAPTER | LIBRARY
  *     serviceName: leasing-credit-bff     # opsiyonel
  *     gatewayPrefix: leasing-credit-bff   # opsiyonel, yalnızca BFF
- *     feignName: LEASING-CREDIT-BFF       # opsiyonel, Feign adı; verilmezse servis/repo adı
- *     aliases: [leasing-credit]           # opsiyonel, ek Feign adları
+ *     aliases: [leasing-credit]           # opsiyonel, Feign adı eşlemesi
  * </pre>
  *
  * Hatalar ilk hatada durmadan toplanır ve tek bir {@link ReposConfigException} ile bildirilir.
@@ -44,7 +43,7 @@ public class ReposConfigLoader {
 
     private static final Set<String> ROOT_KEYS = Set.of("repos", "placeholders");
     private static final Set<String> REPO_KEYS =
-            Set.of("name", "path", "layer", "serviceName", "gatewayPrefix", "feignName", "aliases");
+            Set.of("name", "path", "layer", "serviceName", "gatewayPrefix", "aliases");
 
     public ReposConfig load(Path file) {
         Path source = file.toAbsolutePath().normalize();
@@ -84,7 +83,6 @@ public class ReposConfigLoader {
             putIfNotNull(map, "layer", repo.layer());
             putIfNotNull(map, "serviceName", repo.serviceName());
             putIfNotNull(map, "gatewayPrefix", repo.gatewayPrefix());
-            putIfNotNull(map, "feignName", repo.feignName());
             putIfNotNull(map, "aliases", repo.aliases());
             maps.add(map);
         }
@@ -160,11 +158,10 @@ public class ReposConfigLoader {
             Layer layer = readLayer(map, where, errors);
             String serviceName = optionalString(map, "serviceName", where, errors);
             String gatewayPrefix = trimSlashes(optionalString(map, "gatewayPrefix", where, errors));
-            String feignName = optionalString(map, "feignName", where, errors);
             List<String> aliases = readStringList(map, "aliases", where, errors);
 
             if (errors.size() == errorsBefore) {
-                repos.add(new RepoDefinition(name, path, layer, serviceName, gatewayPrefix, feignName, aliases));
+                repos.add(new RepoDefinition(name, path, layer, serviceName, gatewayPrefix, aliases));
             }
         }
         return repos;

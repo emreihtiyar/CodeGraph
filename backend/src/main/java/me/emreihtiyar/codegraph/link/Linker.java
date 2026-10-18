@@ -5,9 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.function.Function;
 import me.emreihtiyar.codegraph.config.Layer;
-import me.emreihtiyar.codegraph.config.RepoDefinition;
 import me.emreihtiyar.codegraph.extract.PathNormalizer;
 import me.emreihtiyar.codegraph.extract.model.ApiCallFact;
 import me.emreihtiyar.codegraph.extract.model.EndpointFact;
@@ -25,9 +23,8 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li><b>ApiCall → BFF Endpoint:</b> gateway sonrası ilk segment, gateway prefix'i bu değer olan BFF'i seçer. Kalan
  *       path BFF endpoint'leriyle eşleştirilir; gateway prefix'i kesmiyorsa diye prefix'li path de denenir.</li>
- *   <li><b>FeignClient → Service:</b> çözülmüş {@code name/value}; sırasıyla yapılandırmadaki {@code feignName},
- *       servis adı, repo adı, noktalı servis adının son parçası ve {@code aliases} ile büyük-küçük harf duyarsız
- *       eşleşir. Aynı ad iki repoya uyuyorsa sırada önce gelen kazanır.</li>
+ *   <li><b>FeignClient → Service:</b> çözülmüş {@code name/value}; servis adı, repo adı veya {@code aliases} ile
+ *       büyük-küçük harf duyarsız eşleşir.</li>
  *   <li><b>FeignMethod → Endpoint:</b> Feign path'i hedefin endpoint path'iyle (context-path dahil) eşleştirilir;
  *       eşleşme yoksa context-path eklenmiş hali denenir.</li>
  * </ul>
@@ -39,40 +36,13 @@ public class Linker {
 
     private static final Logger log = LoggerFactory.getLogger(Linker.class);
 
-    /**
-     * Bir reponun yapılandırmadaki eşleme adları.
-     *
-     * @param feignName Feign adı ({@code feignName}); yoksa null
-     * @param aliases   ek Feign adları ve BFF gateway prefix'leri ({@code aliases})
-     */
-    public record RepoNames(String feignName, List<String> aliases) {
-
-        static final RepoNames NONE = new RepoNames(null, List.of());
-
-        public RepoNames {
-            aliases = aliases == null ? List.of() : List.copyOf(aliases);
-        }
-
-        public static RepoNames of(RepoDefinition repo) {
-            return new RepoNames(repo.feignName(), repo.aliases());
-        }
-    }
-
-    /** @param names repo adı → yapılandırmadaki eşleme adları */
-    public LinkResult link(List<RepoFacts> repos, Map<String, RepoNames> names) {
+    /** @param aliases repo adı → yapılandırmadaki Feign adı eşlemeleri ({@code aliases}) */
+    public LinkResult link(List<RepoFacts> repos, Map<String, List<String>> aliases) {
         Map<String, RepoFacts> services = new LinkedHashMap<>();
         Map<String, RepoFacts> bffsByPrefix = new LinkedHashMap<>();
         List<RepoFacts> targets = repos.stream()
                 .filter(r -> r.layer() != Layer.FRONTEND && r.layer() != Layer.LIBRARY)
                 .toList();
-        Function<RepoFacts, List<String>> aliases = r -> names.getOrDefault(r.repoName(), RepoNames.NONE).aliases();
-        // Açıkça verilen Feign adı en önce: başka bir reponun servis ya da repo adıyla çakışsa da o kazanır.
-        for (RepoFacts repo : targets) {
-            String feignName = names.getOrDefault(repo.repoName(), RepoNames.NONE).feignName();
-            if (feignName != null) {
-                services.putIfAbsent(lower(feignName), repo);
-            }
-        }
         for (RepoFacts repo : targets) {
             services.putIfAbsent(lower(repo.service().name()), repo);
             if (repo.layer() == Layer.BFF && repo.service().gatewayPrefix() != null) {
@@ -83,13 +53,13 @@ public class Linker {
         for (RepoFacts repo : targets) {
             services.putIfAbsent(lower(repo.repoName()), repo);
             services.putIfAbsent(lower(lastDotted(repo.service().name())), repo);
-            aliases.apply(repo).forEach(a -> services.putIfAbsent(lower(a), repo));
+            aliases.getOrDefault(repo.repoName(), List.of()).forEach(a -> services.putIfAbsent(lower(a), repo));
             if (repo.layer() == Layer.BFF) {
                 // Gateway prefix'i çoğu zaman servis adının kendisi değil: 'LEASING.NGLA.leasing-contract-bff' →
                 // URL'de 'leasing-contract-bff'. Yedek olarak repo adı, noktalı adın son parçası ve alias'lar denenir.
                 bffsByPrefix.putIfAbsent(lower(repo.repoName()), repo);
                 bffsByPrefix.putIfAbsent(lower(lastDotted(repo.service().name())), repo);
-                aliases.apply(repo).forEach(a -> bffsByPrefix.putIfAbsent(lower(a), repo));
+                aliases.getOrDefault(repo.repoName(), List.of()).forEach(a -> bffsByPrefix.putIfAbsent(lower(a), repo));
             }
         }
         log.debug("BFF gateway prefix'leri: {}", bffsByPrefix.entrySet().stream()
@@ -169,7 +139,7 @@ public class Linker {
         if (target == null) {
             return LinkResult.Link.unresolved(repo.repoName(), method.fqn(), client.targetServiceName(),
                     "Hedef servis analizde yok: " + client.targetServiceName()
-                            + " (analizdeyse repos dosyasında ona feignName verin)");
+                            + " (analizdeyse repos dosyasında aliases'ına ekleyin)");
         }
         String contextPath = target.service().contextPath();
         List<String> candidates = contextPath.isEmpty()

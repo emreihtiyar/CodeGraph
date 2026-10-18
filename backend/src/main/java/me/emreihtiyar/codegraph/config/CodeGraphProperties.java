@@ -35,8 +35,8 @@ public record CodeGraphProperties(
     }
 
     /** Satır içi repo tanımı; alanların anlamı {@link RepoDefinition} ile aynıdır. */
-    public record Repo(String name, String path, String layer, String serviceName, String gatewayPrefix,
-            String feignName, List<String> aliases) {}
+    public record Repo(
+            String name, String path, String layer, String serviceName, String gatewayPrefix, List<String> aliases) {}
 
     /** @param dataDir Embedded Neo4j'nin ana dizini (veri, log, transaction log) */
     public record Neo4j(@DefaultValue("./.codegraph/neo4j") Path dataDir) {}

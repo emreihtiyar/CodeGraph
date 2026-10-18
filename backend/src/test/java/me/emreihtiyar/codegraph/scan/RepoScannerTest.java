@@ -90,7 +90,7 @@ class RepoScannerTest {
     }
 
     private static RepoDefinition repo(String name, Path path, Layer layer) {
-        return new RepoDefinition(name, path, layer, null, null, null, List.of());
+        return new RepoDefinition(name, path, layer, null, null, List.of());
     }
 
     private static List<String> paths(List<Path> paths) {
